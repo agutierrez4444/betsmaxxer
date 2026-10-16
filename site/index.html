@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BetsMaxxer</title>
+  <meta name="description" content="NHL and NFL slates with flagged mismatches, trends, and a bet builder to check the odds.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%230ea5e9'/><path d='M9 21l5-10 4 7 2-3 3 6' stroke='white' stroke-width='2.6' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <script>
+    // Apply saved theme before paint to avoid a flash.
+    try {
+      var t = localStorage.getItem("sf-theme");
+      if (t) document.documentElement.setAttribute("data-theme", t);
+    } catch (e) {}
+  </script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="#/nhl">
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 32 32"><path d="M7 22l6-12 5 8 2.5-3.5L25 22" /></svg>
+      </span>
+      <span class="brand-text">Bets<span>Maxxer</span></span>
+    </a>
+    <nav class="sport-switch" aria-label="Sport">
+      <a href="#/nhl" data-sport="nhl">NHL</a>
+      <a href="#/nfl" data-sport="nfl">NFL</a>
+    </nav>
+    <a class="mybets" href="#/bets" title="My bets">
+      <svg viewBox="0 0 24 24"><path d="M4 6h16v4a2 2 0 0 0 0 4v4H4v-4a2 2 0 0 0 0-4z"/><path d="M14 6v12" stroke-dasharray="2 2"/></svg>
+      <span class="mb-text">My bets</span><span id="betCount" class="mb-count"></span>
+    </a>
+    <button class="theme-toggle" id="themeToggle" aria-label="Toggle light/dark mode" title="Toggle theme">
+      <svg class="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4.5"/><path d="M12 2v2.5M12 19.5V22M4.2 4.2l1.8 1.8M18 18l1.8 1.8M2 12h2.5M19.5 12H22M4.2 19.8L6 18M18 6l1.8-1.8"/></svg>
+      <svg class="i-moon" viewBox="0 0 24 24"><path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a7 7 0 0 0 10.5 10.5z"/></svg>
+    </button>
+  </header>
+
+  <main id="app" class="app" aria-live="polite"></main>
+
+  <footer class="foot">
+    Data: NHL public API · Historical rates, not predictions · Bet responsibly
+  </footer>
+
+  <script src="bets.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,230 @@
+# ============================================================
+#  BetsMaxxer — settings
+#  Edit anything here, then re-run:  py -m pipeline.build
+#  No code changes needed.
+# ============================================================
+
+nhl:
+  # ---- Sample sizes -----------------------------------------
+  recent_games: 5            # "recent form" window (try 10)
+  min_sample_games: 15       # until a team has this many games this season,
+                             # top up its sample with last season's final games
+  last_season_games: 41      # how many of last season's final games the bet
+                             # builder can add with its "+ Last season" toggle
+  recent_weight: 0.4        # 0 = season only, 1 = recent only. Used for the
+                             # numbers the conditions look at.
+
+  # ---- The 3 legs you bet ------------------------------------
+  legs:
+    regulation_total_line: 5.5   # "over X.5 goals in regulation"
+    first_period_team_line: 0.5  # "favorite over X.5 goals in the 1st period"
+
+  # ---- Odds shown on cards (free, from the NHL schedule feed) --
+  # 3 = Tipsport (2-way moneyline, decimal). Set to null to hide.
+  odds_provider_id: 3
+
+  # ---- Trends (game page) ------------------------------------
+  # Shows bets that keep hitting this season AND clearly beat what's
+  # normal league-wide (so "always happens" stuff is filtered out).
+  trends:
+    min_games: 5             # need at least this many games
+    min_hit_rate: 0.80       # hit in at least 80% of them
+    min_gap: 0.25            # and at least 25 points above the league norm
+    max_per_game: 30         # cap the list (sorted by most unusual first)
+
+  # ---- Bet builder -------------------------------------------
+  builder:
+    min_edge: 0.05           # call a price "favorable" only if our estimate beats
+                             # the implied probability by at least this much (5%)
+
+  simulation:
+    iterations: 20000        # simulated games per matchup
+    shrink_games: 10         # pull each team's per-period rates toward the league
+                             # average, as if it had this many extra average games
+                             # (steadies early-season numbers; 0 = off)
+    ot_goal_prob: 0.62       # share of overtimes decided before a shootout
+
+  # ---- Flag tiers --------------------------------------------
+  # Tried top to bottom. If the strict tier flags fewer than
+  # min_flagged_per_day games, the next (looser) tier is tried, etc.
+  flag_tiers:
+    - { name: Strict,   min_score: 70 }
+    - { name: Standard, min_score: 55 }
+    - { name: Loose,    min_score: 40 }
+  min_flagged_per_day: 1
+  max_flagged_per_day: 3
+  fill_to_minimum: true      # if even the loosest tier finds nothing, still
+                             # flag the top-scoring game(s) as "Best available"
+
+  # ---- Conditions --------------------------------------------
+  # Each game is scored from the favorite's point of view
+  # (the side that scores higher). Score = points earned / total
+  # positive weight x 100. Negative weights subtract.
+  # League ranks: 1 = best (most goals for / fewest goals against).
+  conditions:
+    fav_offense:
+      label: "Favorite scores a lot"
+      enabled: true
+      weight: 20
+      top_n: 10              # favorite's goals-for/game rank in top N
+
+    dog_defense_leaky:
+      label: "Underdog allows a lot"
+      enabled: true
+      weight: 20
+      bottom_n: 10           # underdog's goals-against/game rank in bottom N
+
+    dog_offense_weak:
+      label: "Underdog struggles to score"
+      enabled: true
+      weight: 15
+      bottom_n: 12
+
+    fav_defense_solid:
+      label: "Favorite keeps it out"
+      enabled: true
+      weight: 10
+      top_n: 12
+
+    goal_diff_gap:
+      label: "Big goal-differential gap"
+      enabled: true
+      weight: 15
+      min_gap: 1.0           # (fav GD/game) - (dog GD/game)
+
+    fav_1p_scoring:
+      label: "Favorite scores in the 1st"
+      enabled: true
+      weight: 10
+      min_pct: 0.65          # share of games favorite scored 1+ in 1st period
+
+    dog_1p_leaky:
+      label: "Underdog concedes in the 1st"
+      enabled: true
+      weight: 10
+      min_pct: 0.65
+
+    projected_total:
+      label: "High-scoring matchup"
+      enabled: true
+      weight: 10
+      min_goals: 6.0         # ((fav GF + dog GA)/2) + ((dog GF + fav GA)/2)
+
+    fav_home:
+      label: "Favorite at home"
+      enabled: true
+      weight: 5
+
+    dog_back_to_back:
+      label: "Underdog on a back-to-back"
+      enabled: true
+      weight: 5
+
+    fav_back_to_back:
+      label: "Favorite on a back-to-back"
+      enabled: true
+      weight: -10
+
+    rest_edge:
+      label: "Rest advantage"
+      enabled: true
+      weight: 5
+      min_days: 2            # favorite has 2+ more days off (capped at 3 each)
+
+    dog_goalie_hot:
+      label: "Underdog's likely goalie is hot"
+      enabled: true
+      weight: -10
+      min_save_pct: 0.920
+      min_starts: 3
+
+# ============================================================
+nfl:
+  recent_games: 4            # "recent form" window
+  min_sample_games: 8        # top up early-season samples with last season
+  last_season_games: 17      # how many of last season's games "+ Last season" adds
+  recent_weight: 0.4
+
+  # The default 3-leg combo: favorite moneyline + game over the posted
+  # total + favorite scores in the 1st quarter.
+  legs:
+    total_line_fallback: 44.5   # used when no posted total exists
+    first_quarter_team_line: 0.5
+
+  trends:
+    min_games: 4
+    min_hit_rate: 0.80
+    min_gap: 0.25
+    max_per_game: 30
+
+  builder:
+    min_edge: 0.05
+
+  simulation:
+    iterations: 20000
+    shrink_games: 4          # NFL samples are small; pull toward league average
+    ot_decided_prob: 0.9     # tied after regulation: share of OTs that get a winner
+
+  flag_tiers:
+    - { name: Strict,   min_score: 70 }
+    - { name: Standard, min_score: 55 }
+    - { name: Loose,    min_score: 40 }
+  min_flagged_per_day: 2     # per week
+  max_flagged_per_day: 5
+  fill_to_minimum: true
+
+  conditions:
+    fav_offense:
+      label: "Favorite scores a lot"
+      enabled: true
+      weight: 20
+      top_n: 10
+    dog_defense_leaky:
+      label: "Underdog allows a lot"
+      enabled: true
+      weight: 20
+      bottom_n: 10
+    dog_offense_weak:
+      label: "Underdog struggles to score"
+      enabled: true
+      weight: 15
+      bottom_n: 10
+    fav_defense_solid:
+      label: "Favorite keeps it out"
+      enabled: true
+      weight: 10
+      top_n: 12
+    point_diff_gap:
+      label: "Big point-differential gap"
+      enabled: true
+      weight: 15
+      min_gap: 10            # (fav PD/game) - (dog PD/game)
+    yards_gap:
+      label: "Big yardage gap"
+      enabled: true
+      weight: 10
+      min_gap: 80            # net yards/game difference
+    turnover_gap:
+      label: "Turnover edge"
+      enabled: true
+      weight: 5
+      min_gap: 1.0
+    fav_home:
+      label: "Favorite at home"
+      enabled: true
+      weight: 5
+    rest_edge:
+      label: "Rest advantage"
+      enabled: true
+      weight: 5
+      min_days: 3
+    dog_short_week:
+      label: "Underdog on a short week"
+      enabled: true
+      weight: 5
+      max_rest: 4
+    market_agrees:
+      label: "Bookmakers agree (big spread)"
+      enabled: true
+      weight: 10
+      min_spread: 6.5
