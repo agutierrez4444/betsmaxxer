@@ -485,7 +485,9 @@
     var unit = data.sport === "nhl" ? "goals" : "points";
     var src = t.prop || t.leg || {};
     var spread = src.m === "spread";
-    var lined = t.kind === "player" || (t.leg && t.leg.line != null);
+    // Files built before the popup existed have no per-game numbers: show the summary only.
+    var legacy = !t.vals;
+    var lined = !legacy && (t.kind === "player" || (t.leg && t.leg.line != null));
     var mode = spread || src.side !== "under" ? "min" : "max";
     var N = !lined ? null : spread ? Math.round(-src.line + 0.5) : mode === "min" ? Math.round(src.line + 0.5) : Math.round(src.line - 0.5);
     var dist = (data.trendDist || {})[t.dk] || null;
@@ -539,9 +541,9 @@
     wrap.addEventListener("click", function (ev) { if (ev.target === wrap) close(); });
 
     function render() {
-      var flags = t.vals.map(ok);
+      var flags = (t.vals || []).map(ok);
       var counted = flags.filter(function (f) { return f !== null; });
-      var hits = counted.filter(Boolean).length, n = counted.length;
+      var hits = legacy ? t.hits : counted.filter(Boolean).length, n = legacy ? t.n : counted.length;
       var b = base(), rate = n ? hits / n : null;
       var est = n && b != null ? (hits + 5 * b) / (n + 5) : rate;
       var v = Bets.verdict(est, odds, minEdge);
@@ -565,7 +567,8 @@
         '<div class="bnum"><span class="k">Rate</span><b class="num">' + pct(rate) + "</b></div>" +
         '<div class="bnum"><span class="k">League normal</span><b class="num">' + pct(b) + "</b></div>" +
         '<div class="bnum"><span class="k" title="Pulled toward normal as if we had also seen 5 normal games">Estimate</span><b class="num">' + pct(est) + "</b></div></div>" +
-        '<div class="m-games">' + t.vals.map(function (x, k) {
+        (legacy ? '<p class="faint">Game-by-game numbers appear after the next data refresh.</p>' : "") +
+        '<div class="m-games">' + (t.vals || []).map(function (x, k) {
           var f = flags[k];
           return '<div class="mg ' + (f === null ? "na" : f ? "hit" : "miss") + '" title="' + esc(t.tags[k] || "") + '">' +
             "<b>" + (x == null ? "–" : lined ? x : f ? "✓" : "✗") + "</b><span>" + esc((t.tags[k] || "").replace(/^(\d\d)-(\d\d)/, "$1/$2")) + "</span></div>";
