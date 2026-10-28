@@ -228,3 +228,103 @@ nfl:
       enabled: true
       weight: 10
       min_spread: 6.5
+
+# ============================================================
+#  NBA
+# ============================================================
+nba:
+  recent_games: 5            # "recent form" window
+  min_sample_games: 15       # top up early-season samples with last season
+  last_season_games: 41      # how many of last season's games "+ Last season" adds
+  recent_weight: 0.4
+
+  # The default 3-leg combo: favorite moneyline + game over the posted
+  # total + favorite wins the 1st half.
+  legs:
+    total_line_fallback: 225.5   # used when no posted total exists
+
+  trends:
+    min_games: 4
+    min_hit_rate: 0.80
+    min_gap: 0.25
+    max_per_game: 30
+
+  builder:
+    min_edge: 0.05
+
+  simulation:
+    iterations: 20000
+    shrink_games: 5          # pull small samples toward the league average
+    pace_sd: 0.04            # game-to-game pace swings (moves both teams together)
+
+  flag_tiers:
+    - { name: Strict,   min_score: 70 }
+    - { name: Standard, min_score: 55 }
+    - { name: Loose,    min_score: 40 }
+  min_flagged_per_day: 1
+  max_flagged_per_day: 3
+  fill_to_minimum: true
+
+  conditions:
+    fav_offense:
+      label: "Favorite scores a lot"
+      enabled: true
+      weight: 15
+      top_n: 10
+    dog_defense_leaky:
+      label: "Underdog allows a lot"
+      enabled: true
+      weight: 15
+      bottom_n: 10
+    dog_offense_weak:
+      label: "Underdog struggles to score"
+      enabled: true
+      weight: 10
+      bottom_n: 10
+    fav_defense_solid:
+      label: "Favorite defends well"
+      enabled: true
+      weight: 10
+      top_n: 10
+    point_diff_gap:
+      label: "Big point-differential gap"
+      enabled: true
+      weight: 20
+      min_gap: 8             # (fav pts diff/game) - (dog pts diff/game)
+    win_pct_gap:
+      label: "Big win % gap"
+      enabled: true
+      weight: 10
+      min_gap: 0.25
+    fav_home:
+      label: "Favorite at home"
+      enabled: true
+      weight: 5
+    dog_back_to_back:
+      label: "Underdog on a back-to-back"
+      enabled: true
+      weight: 10
+    fav_back_to_back:
+      label: "Favorite on a back-to-back"
+      enabled: true
+      weight: -10
+    rest_edge:
+      label: "Rest advantage"
+      enabled: true
+      weight: 5
+      min_days: 2
+    market_agrees:
+      label: "Bookmakers agree (big spread)"
+      enabled: true
+      weight: 10
+      min_spread: 7.5
+    dog_star_out:
+      label: "Underdog's top scorer is out"
+      enabled: true
+      weight: 10
+      top_n: 2               # checks the team's top N scorers on today's injury report
+    fav_star_out:
+      label: "Favorite's top scorer is out"
+      enabled: true
+      weight: -15
+      top_n: 2

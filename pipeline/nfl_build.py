@@ -89,7 +89,7 @@ def team_logs(game_rows, team_stats, quarters):
             spread = None if spread_home is None else (-spread_home if side == "home" else spread_home)
             logs[team].append({
                 "gameId": g["game_id"], "espn": g["espn"], "date": g["gameday"], "season": int(g["season"]),
-                "week": int(g["week"]), "opp": opp, "home": side == "home",
+                "week": int(g["week"]), "tag": "W%s" % g["week"], "opp": opp, "home": side == "home",
                 "gf": gf, "ga": ga, "win": gf > ga, "tie": gf == ga,
                 "end": "OT" if g["overtime"] == "1" else "REG",
                 "periods": periods,
@@ -202,6 +202,7 @@ def player_rows(rows, season, before_week=None):
             "any_td": rush_td + rec_td,
             "pass_rush_yds": _i(r.get("passing_yards")) + _i(r.get("rushing_yards")),
             "rush_rec_yds": _i(r.get("rushing_yards")) + _i(r.get("receiving_yards")),
+            "opp": r.get("opponent_team"), "tag": "W%d" % wk, "home": r["game_id"].split("_")[-1] == r["team"],
             "fg_made": _i(r.get("fg_made")), "fg_att": _i(r.get("fg_att")), "pat_made": _i(r.get("pat_made")),
             "kick_pts": 3 * _i(r.get("fg_made")) + _i(r.get("pat_made")),
         })
@@ -409,6 +410,7 @@ def build_week(season, week, cfg, src):
     logs_cur = {t: [r for r in logs.get(t, []) if r["season"] == season and r["periods"]] for t in teams}
     league_out = trends.league_outcomes(logs_cur, extras=("spread", "totalLine"))
     base_cache = {}
+    dists = {}
     tcfg = cfg["trends"]
 
     def ctx(stat, opp):
@@ -485,8 +487,8 @@ def build_week(season, week, cfg, src):
         items = []
         for team, opp, slot in ((home, away, "home"), (away, home, "away")):
             items += trends.team_trends(team, opp, slot, logs_cur, league_out, TEAM_PROPS, tcfg,
-                                        extras=("spread", "totalLine"), base_cache=base_cache)
-            pt = trends.player_trends(team, opp, by_team.get(team, {}), prows, PLAYER_PROPS, tcfg, ctx_fn=ctx,
+                                        extras=("spread", "totalLine"), base_cache=base_cache, dists=dists)
+            pt = trends.player_trends(team, opp, by_team.get(team, {}), prows, PLAYER_PROPS, tcfg, ctx_fn=ctx, dists=dists,
                                       info=lambda pid, team=team: {"headshot": by_team[team][pid][0]["headshot"]})
             for t in pt:
                 t["label"] = _prop_label(t["name"], t["prop"])
@@ -525,6 +527,7 @@ def build_week(season, week, cfg, src):
             "lineDefaults": {"total": legs["total_line_fallback"], "team": 20.5, "teamScope": "game", "spread": -3.5,
                              "periodTotal": 9.5},
         },
+        "trendDist": dists,
         "games": out_games,
     }
 

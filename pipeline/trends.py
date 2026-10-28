@@ -72,6 +72,37 @@ def leg_hits(leg, o):
     raise ValueError(m)
 
 
+def leg_value(leg, o):
+    """The number a line-based leg is judged on (None for yes/no legs):
+    total -> both teams, team -> that team, spread -> that team's margin."""
+    m = leg["m"]
+    if m not in ("total", "team", "spread"):
+        return None
+    h, a = _goals(o, leg["s"])
+    if m == "total":
+        return h + a
+    if m == "team":
+        return h if leg["t"] == "home" else a
+    return h - a if leg["t"] == "home" else a - h
+
+
+def _dist(vals):
+    """[[value, count], ...] for the trend popup's league baseline at any line."""
+    c = {}
+    for v in vals:
+        if v is not None:
+            c[v] = c.get(v, 0) + 1
+    return [[v, c[v]] for v in sorted(c)]
+
+
+def _tag(r):
+    """Short game label for the popup, e.g. "10-26 @ CHA"."""
+    when = r.get("tag") or (r.get("date") or "")[5:]
+    if r.get("opp"):
+        return "%s %s %s" % (when, "vs" if r.get("home") else "@", r["opp"])
+    return when
+
+
 def _prop_test(prop, o):
     """True/False, or None if this game doesn't count (missing data)."""
     if "pred" in prop:
@@ -115,11 +146,13 @@ def league_outcomes(all_logs, extras=()):
     return [outcome(r, extras) for t in all_logs for r in all_logs[t]]
 
 
-def team_trends(team, opp, slot, logs, league, props, cfg, extras=(), base_cache=None):
+def team_trends(team, opp, slot, logs, league, props, cfg, extras=(), base_cache=None, dists=None):
     """props: list of {"key", "label" (with {T}), "leg" or "pred", "group", "rank"}.
     `slot` is the team's side tonight ("home"/"away") so legs can be sent to
-    the bet builder in tonight's terms. `league` = league_outcomes(...)."""
-    mine = [outcome(r, extras) for r in logs.get(team, [])]
+    the bet builder in tonight's terms. `league` = league_outcomes(...).
+    `dists` (optional dict) collects league value distributions for the popup."""
+    rows = logs.get(team, [])
+    mine = [outcome(r, extras) for r in rows]
     theirs = [mirror(outcome(r, extras)) for r in logs.get(opp, [])]
     base_cache = {} if base_cache is None else base_cache
     found = []
@@ -133,11 +166,19 @@ def team_trends(team, opp, slot, logs, league, props, cfg, extras=(), base_cache
             continue
         orate, ohits, on = _rate(_prop_test(p, o) for o in theirs)
         leg = None
+        vals = [None if f is None else int(f) for f in flags]
+        dk = None
         if "leg" in p:
             leg = dict(p["leg"])
+            if "line" in leg:
+                vals = [leg_value(p["leg"], o) for o in mine]
+                dk = "%s|%s|%s" % (leg["m"], leg["s"], leg.get("t", ""))
+                if dists is not None and dk not in dists:
+                    dists[dk] = _dist(leg_value(p["leg"], o) for o in league)
             if leg.get("t") in ("home", "away") and slot == "away":
                 leg["t"] = "away" if leg["t"] == "home" else "home"
         found.append({
+            "vals": vals, "tags": [_tag(r) for r in rows], "dk": dk,
             "kind": "team", "team": team, "label": p["label"].replace("{T}", team),
             "hits": hits, "n": n, "rate": round(rate, 3), "base": round(base, 3),
             "gap": round(rate - base, 3), "streak": _streak(flags),
@@ -148,7 +189,7 @@ def team_trends(team, opp, slot, logs, league, props, cfg, extras=(), base_cache
     return _dedupe(found)
 
 
-def player_trends(team, opp, rows_by_player, all_rows, props, cfg, ctx_fn=None, info=None):
+def player_trends(team, opp, rows_by_player, all_rows, props, cfg, ctx_fn=None, info=None, dists=None):
     """rows_by_player: {pid: [stat rows newest first]} for this team.
     all_rows: every qualifying player-game row in the league sample (baselines).
     props: list of {"stat", "label", "lines", "sides", "pos" (set), "usage" fn,
@@ -168,6 +209,9 @@ def player_trends(team, opp, rows_by_player, all_rows, props, cfg, ctx_fn=None, 
             if len(used) < cfg["min_games"]:
                 continue
             vals = [p["value"](r) for r in used]
+            dk = "%s|%s" % (p["stat"], pos)
+            if dists is not None and dk not in dists:
+                dists[dk] = _dist(p["value"](r) for r in all_rows if r["pos"] == pos and p["usage"](r))
             for line in p["lines"]:
                 for side in p["sides"]:
                     flags = [(v > line) if side == "over" else (v < line) for v in vals]
@@ -182,6 +226,7 @@ def player_trends(team, opp, rows_by_player, all_rows, props, cfg, ctx_fn=None, 
                     word = "over" if side == "over" else "under"
                     found.append({
                         "kind": "player", "team": team, "pid": pid, "name": name, "pos": pos,
+                        "vals": vals, "tags": [_tag(r) for r in used], "dk": dk, "what": p["label"],
                         "label": "%s %s %s %s" % (name, word, line, p["label"]),
                         "hits": hits, "n": n, "rate": round(rate, 3), "base": round(base, 3),
                         "gap": round(rate - base, 3), "streak": _streak(flags),

@@ -161,6 +161,7 @@ def build_day(day_str, today_str, cfg, shared):
     p_by_team, p_flat = nhl_trends.player_rows(boxes, logs_cur)
     league_out = trends.league_outcomes(logs_cur)
     base_cache = {}
+    dists = {}
 
     # ---- each game on the slate ----
     out_games = []
@@ -257,7 +258,7 @@ def build_day(day_str, today_str, cfg, shared):
             }
         game["trends"] = nhl_trends.build(
             game, {home: "home", away: "away"}, logs_cur, profiles, p_by_team, p_flat, shared["names"],
-            cfg, ranks, current_season, base_cache, league_out)
+            cfg, ranks, current_season, base_cache, league_out, dists)
         h2h = [r for r in side[home]["_log"] if r["opp"] == away][:5]
         game["h2h"] = [_game_row(r) for r in h2h]
 
@@ -292,6 +293,7 @@ def build_day(day_str, today_str, cfg, shared):
             "trends": cfg.get("trends", {}),
             "propStats": nhl_trends.PROP_STATS,
         },
+        "trendDist": dists,
         "games": out_games,
     }
 

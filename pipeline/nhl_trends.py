@@ -119,12 +119,14 @@ def load_boxes(game_ids):
 def player_rows(boxes, logs_cur):
     """{team: {pid: [rows newest first]}} and a flat list of all rows."""
     date_of = {r["gameId"]: r["date"] for t in logs_cur for r in logs_cur[t]}
+    side_of = {(r["gameId"], t): (r["opp"], r["home"]) for t in logs_cur for r in logs_cur[t]}
     by_team = defaultdict(lambda: defaultdict(list))
     flat = []
     for gid, b in boxes.items():
         for p in b["players"]:
             row = dict(p)
             row["date"] = date_of.get(gid, b.get("date"))
+            row["opp"], row["home"] = side_of.get((gid, p["team"]), (None, None))
             by_team[p["team"]][p["id"]].append(row)
             flat.append(row)
     for t in by_team:
@@ -145,7 +147,7 @@ def result_box(game_id):
     return {str(p["id"]): {k: p[k] for k in keys if k in p} for p in b["players"]}
 
 
-def build(game, slots, logs_cur, profiles, by_team, flat, names, cfg, ranks, season, base_cache, league_out):
+def build(game, slots, logs_cur, profiles, by_team, flat, names, cfg, ranks, season, base_cache, league_out, dists=None):
     """All trends for one game. slots = {abbrev: "home"/"away"};
     by_team/flat from player_rows(); names = {pid: {"name", "headshot"}}."""
     home, away = game["home"], game["away"]
@@ -175,9 +177,9 @@ def build(game, slots, logs_cur, profiles, by_team, flat, names, cfg, ranks, sea
     items = []
     for team, opp in ((home, away), (away, home)):
         items += trends.team_trends(team, opp, slots[team], logs_cur, league_out, TEAM_PROPS, tcfg,
-                                    base_cache=base_cache)
+                                    base_cache=base_cache, dists=dists)
         items += trends.player_trends(team, opp, by_team.get(team, {}), flat, PLAYER_PROPS, tcfg,
-                                      ctx_fn=ctx, info=info)
+                                      ctx_fn=ctx, info=info, dists=dists)
     # Re-label players with full names now that info() has run.
     for t in items:
         if t["kind"] == "player":

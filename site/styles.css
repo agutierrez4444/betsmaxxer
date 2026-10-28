@@ -587,3 +587,47 @@ img { display: block; }
 .ex-icon .ring span { font-size: 15px; }
 .ex-icon .ring span small { font-size: 6px; }
 @media (max-width: 560px) { .ex-icon { display: none; } }
+
+/* ============ Trend popup ============ */
+.tr-open { all: unset; cursor: pointer; font-weight: 600; font-size: 13.5px; overflow-wrap: anywhere; }
+.tr-open:hover { color: var(--accent); }
+.tr-open:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+.tr-more { color: var(--accent); font-weight: 700; }
+body.modal-open { overflow: hidden; }
+.modal-back { position: fixed; inset: 0; z-index: 60; background: rgba(5, 10, 20, .55); backdrop-filter: blur(3px); display: grid; place-items: center; padding: 16px; animation: fadeIn .15s ease; }
+.modal { width: min(640px, 100%); max-height: calc(100vh - 32px); overflow: auto; padding: 20px; background: var(--surface); box-shadow: var(--shadow-hover); }
+.m-head { display: flex; align-items: center; gap: 12px; }
+.m-title { flex: 1; min-width: 0; }
+.m-title h3 { margin: 0; font-size: 18px; overflow-wrap: anywhere; }
+.m-title .hint { margin: 2px 0 0; }
+.m-x { width: 34px; padding: 0; justify-content: center; }
+.m-x svg { width: 18px; height: 18px; }
+.m-line { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 16px; }
+.stepper { display: flex; align-items: center; gap: 4px; }
+.stepper .icon-btn { width: 34px; padding: 0; justify-content: center; font-size: 18px; }
+.stepper input { width: 64px; height: 34px; text-align: center; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font: 700 16px var(--display); }
+.stepper input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+.m-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 16px 0 12px; padding: 12px 14px; border-radius: var(--radius-sm); background: var(--surface-2); }
+.m-games { display: grid; grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); gap: 6px; }
+.mg { display: grid; justify-items: center; padding: 6px 4px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface-2); }
+.mg b { font: 700 16px var(--display); }
+.mg span { font-size: 10px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.mg.hit { background: var(--good-soft); border-color: transparent; }
+.mg.hit b { color: var(--good); }
+.mg.miss { background: var(--bad-soft); border-color: transparent; }
+.mg.miss b { color: var(--bad); }
+.mg.na { opacity: .5; }
+.m-foot { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); }
+.m-sp { flex: 1; }
+@media (max-width: 560px) {
+  .m-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .modal { padding: 16px; }
+}
+
+/* ============ NBA bits ============ */
+.inj { font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--bad); background: var(--bad-soft); padding: 1px 6px; border-radius: 5px; margin-left: 4px; }
+.inj.s-DaytoDay, .inj.s-Questionable, .inj.s-Probable { color: var(--tier-standard); background: rgba(217, 119, 6, .12); }
+.kp.hurt img { filter: grayscale(1); opacity: .6; }
+.injrow { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+.injrow:last-child { border-bottom: 0; }
+.injrow .inj { margin-left: 0; min-width: 64px; text-align: center; }

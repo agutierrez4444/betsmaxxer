@@ -63,7 +63,7 @@
   });
 
   // ---------- routing ----------
-  // #/nhl · #/nhl/2026-10-15 · #/nhl/2026-10-15/2026020118 · #/nfl · #/nfl/2026-w06 · #/nfl/2026-w06/<id> · #/bets
+  // #/nhl · #/nhl/2026-10-15 · #/nhl/2026-10-15/2026020118 · #/nfl · #/nfl/2026-w06 · #/nfl/2026-w06/<id> · #/nba/... · #/bets
   function route() {
     var parts = (location.hash || "#/nhl").replace(/^#\/?/, "").split("/");
     var sport = parts[0] || "nhl";
@@ -72,7 +72,7 @@
     });
     document.querySelector(".mybets").classList.toggle("active", sport === "bets");
     if (sport === "bets") return renderBets();
-    if (sport !== "nfl") sport = "nhl";
+    if (sport !== "nfl" && sport !== "nba") sport = "nhl";
     currentSport = sport;
     if (parts[2]) return renderGame(sport, parts[1], parts[2]);
     return renderDay(sport, parts[1]);
@@ -85,7 +85,7 @@
   }
   function fail(err) {
     app.innerHTML = '<div class="card empty"><h3>Couldn\'t load data</h3><p class="muted">' + esc(err.message) +
-      '</p><p class="faint">Run <code>run.bat</code> (or <code>py -m pipeline.build</code> / <code>py -m pipeline.nfl_build</code>) and serve the <code>site</code> folder.</p></div>';
+      '</p><p class="faint">Run <code>run.bat</code> (or <code>py -m pipeline.build</code> / <code>nfl_build</code> / <code>nba_build</code>) and serve the <code>site</code> folder.</p></div>';
   }
   var currentSport = "nhl";
 
@@ -100,6 +100,15 @@
     return "";
   }
   function isNFL(data) { return data && data.sport === "nfl"; }
+  function isNBA(data) { return data && data.sport === "nba"; }
+  // Words that change with the sport.
+  function words(sport) {
+    return {
+      nhl: { unit: "goal", venue: "ice", period: "period", leg3: "Fav scores 1st", over: "Over (reg.)" },
+      nfl: { unit: "point", venue: "field", period: "quarter", leg3: "Fav scores Q1", over: "Over (posted)" },
+      nba: { unit: "point", venue: "court", period: "quarter", leg3: "Fav wins 1st half", over: "Over (posted)" },
+    }[sport] || {};
+  }
   function fmtRange(a, b) {
     var x = fmtDay(a, { month: "short", day: "numeric" });
     return a === b ? x : x + " – " + fmtDay(b, { month: a.slice(5, 7) === b.slice(5, 7) ? undefined : "short", day: "numeric" });
@@ -163,25 +172,25 @@
       '<div class="day-strip">' + strip + "</div>" +
       '<div class="explain card"><div class="ex-icon" aria-hidden="true">' + ring(72) + "</div><div>" +
       "<b>What's the Stomp Index?</b> Every game gets a 0–100 score from simple rules: the favorite scores a lot, the underdog allows a lot, " +
-      "a big " + (nfl ? "point" : "goal") + "-differential gap, rest, home " + (nfl ? "field" : "ice") + " and more. The higher the score, the more one-sided the matchup looks on paper. " +
+      "a big " + words(data.sport).unit + "-differential gap, rest, home " + words(data.sport).venue + (isNBA(data) ? ", injuries" : "") + " and more. The higher the score, the more one-sided the matchup looks on paper. " +
       "<b>Worth a look</b> are the most lopsided games " + (nfl ? "this week" : "today") + ", your best candidates for favorite-side bets. " +
       "The rest of the slate is much closer and harder to call. It's a shortlist for your own research, not a prediction." +
       '<div class="legend">' + tiers + "</div></div></div>" +
-      trackRecord(days, nfl) +
+      trackRecord(days, data.sport) +
       '<div class="section-title">Worth a look <span class="count">' + flagged.length + "</span></div>" +
       (flagged.length ? '<div class="grid flagged">' + flagged.map(gameCard).join("") + "</div>"
         : '<div class="card empty">Nothing flagged for this ' + (nfl ? "week" : "day") + ".</div>") +
       (rest.length ? '<div class="section-title">Rest of the slate <span class="count">' + rest.length + "</span></div>" +
         '<div class="grid">' + rest.map(gameCard).join("") + "</div>" : "") +
       '<p class="note">Built ' + new Date(data.generatedAt).toLocaleString() + " · stats use games before this " + (nfl ? "week" : "date") +
-      " · recent window " + data.settings.recentGames + " games" + (nfl ? " · odds and lines from nflverse (closing lines)" : "") + "</p></div>";
+      " · recent window " + data.settings.recentGames + " games" + (nfl ? " · odds and lines from nflverse (closing lines)" : isNBA(data) ? " · odds, lines and injuries from ESPN (DraftKings)" : "") + "</p></div>";
 
     var active = app.querySelector(".day-pill.active");
     if (active) active.scrollIntoView({ block: "nearest", inline: "center" });
   }
 
   // How flagged games have actually done, across every built day that has results.
-  function trackRecord(days, nfl) {
+  function trackRecord(days, sport) {
     var n = 0, h = { ml: 0, over: 0, firstPeriod: 0, all3: 0 };
     days.forEach(function (d) {
       if (!d.flaggedFinal) return;
@@ -194,7 +203,7 @@
         '<div class="tr-l">' + label + "</div></div>";
     };
     return '<div class="card track"><div class="tr-title">Flag track record<span>' + n + " finished flagged games</span></div>" +
-      cell("Moneyline", "ml") + cell(nfl ? "Over (posted)" : "Over (reg.)", "over") + cell(nfl ? "Fav scores Q1" : "Fav scores 1st", "firstPeriod") + cell("All 3", "all3") + "</div>";
+      cell("Moneyline", "ml") + cell(words(sport).over, "over") + cell(words(sport).leg3, "firstPeriod") + cell("All 3", "all3") + "</div>";
   }
 
   function gameCard(g) {
@@ -232,11 +241,11 @@
     if (r) {
       legs = '<div class="legs-result">' +
         legChip(fav + " ML", r.legs.ml) + legChip((g.lines ? "Total " : "Reg. total ") + r.regTotal, r.legs.over) +
-        legChip(fav + (g.lines ? " Q1" : " 1st"), r.legs.firstPeriod) + legChip("All 3", r.legs.all3) + "</div>";
+        legChip(fav + (currentSport === "nba" ? " 1st half" : g.lines ? " Q1" : " 1st"), r.legs.firstPeriod) + legChip("All 3", r.legs.all3) + "</div>";
     }
 
     var top = (g.stomp.flag ? '<span class="badge">' + esc(g.stomp.flag) + "</span>" : "<span>" + esc(g.venue || "") + "</span>") +
-      "<span>" + (r ? "Final" + (r.end !== "REG" ? " / " + r.end : "") : g.state === "LIVE" || g.state === "CRIT" ? "Live" : (g.lines ? new Date(g.startTimeUTC).toLocaleDateString(undefined, { weekday: "short" }) + " " : "") + fmtTime(g.startTimeUTC)) + "</span>";
+      "<span>" + (r ? "Final" + (r.end !== "REG" ? " / " + r.end : "") : g.state === "LIVE" || g.state === "CRIT" ? "Live" : (currentSport === "nfl" ? new Date(g.startTimeUTC).toLocaleDateString(undefined, { weekday: "short" }) + " " : "") + fmtTime(g.startTimeUTC)) + "</span>";
 
     return '<a class="card game-card ' + (g.stomp.flag ? "is-flagged " + tierClass(g.stomp.flag) : "") + '" href="#/' + currentSport + "/" + currentDate + "/" + g.id + '">' +
       '<div class="gc-top">' + top + "</div>" +
@@ -271,7 +280,7 @@
     var w = state.window;
     var legsCfg = data.settings.legs;
     var r = g.result;
-    var nfl = isNFL(data);
+    var nfl = isNFL(data), nba = isNBA(data), pts = nfl || nba;
     Bets.configure(data.settings);
 
     function heroTeam(t) {
@@ -314,9 +323,10 @@
       // Legs
       '<div class="card panel"><div class="panel-head"><div><h3>The 3 legs — how often they\'ve hit</h3>' +
       '<p class="hint">' + esc(fav.short) + " rates are from their games as the favorite side; " + esc(dog.short) +
-      " rates are the mirror image from theirs (lost, over, " + (nfl ? "allowed points in Q1" : "conceded in 1st") + "). " +
-      (nfl ? "The over uses each past game's posted total. " : "") + "Past results, not a prediction.</p></div>" + seg + "</div>" +
-      legsPanel(g, fav, dog, w, legsCfg) +
+      " rates are the mirror image from theirs (lost, over, " + (nba ? "trailed at half" : nfl ? "allowed points in Q1" : "conceded in 1st") + "). " +
+      (nfl ? "The over uses each past game's posted total. " : nba ? "The over uses each past game's posted total when we have it (this season), otherwise " + legsCfg.total_line_fallback + ". " : "") +
+      "Past results, not a prediction.</p></div>" + seg + "</div>" +
+      legsPanel(g, fav, dog, w, legsCfg, data.sport) +
       (sampleNote && w === "sample" ? '<p class="note">' + esc(sampleNote) + "</p>" : "") + "</div>" +
 
       '<div class="card panel builder" id="builder"></div>' +
@@ -328,24 +338,25 @@
       "'s side (the other way round it scores " + g.stomp.otherSideScore + "). Edit rules in config.yaml → " + data.sport + ".</p>" + condList(g) + "</div>" +
       // Comparison
       '<div class="card panel"><div class="panel-head"><div><h3>Head to head numbers</h3><p class="hint">Per game · ' +
-      (w === "recent" ? "last " + data.settings.recentGames : "season") + "</p></div>" + seg + "</div>" + compare(away, home, w, nfl) + "</div>" +
+      (w === "recent" ? "last " + data.settings.recentGames : "season") + "</p></div>" + seg + "</div>" + compare(away, home, w, data.sport) + "</div>" +
       "</div>" +
 
       // Periods
-      '<div class="card panel"><div class="panel-head"><div><h3>' + (nfl ? "Points by quarter" : "Goals by period") + '</h3><p class="hint">Average ' +
-      (nfl ? "points" : "goals") + " for and against per " + (nfl ? "quarter" : "period") + " · " +
+      '<div class="card panel"><div class="panel-head"><div><h3>' + (pts ? "Points by quarter" : "Goals by period") + '</h3><p class="hint">Average ' +
+      (pts ? "points" : "goals") + " for and against per " + (pts ? "quarter" : "period") + " · " +
       (w === "recent" ? "last " + data.settings.recentGames : "season") + "</p></div>" + seg + "</div>" + periodChart(away, home, w) + "</div>" +
 
       // Recent games
-      '<div class="cols-2">' + recentList(away, legsCfg, nfl) + recentList(home, legsCfg, nfl) + "</div>" +
+      '<div class="cols-2">' + recentList(away, legsCfg, data.sport) + recentList(home, legsCfg, data.sport) + "</div>" +
 
       // Players
-      (nfl ? '<div class="cols-2">' + keyPlayers(away) + keyPlayers(home) + "</div>"
+      (nba ? '<div class="cols-2">' + nbaPlayers(away) + nbaPlayers(home) + "</div>"
+        : nfl ? '<div class="cols-2">' + keyPlayers(away) + keyPlayers(home) + "</div>"
         : '<div class="cols-2">' + skaterTable(away, data.settings.recentGames) + skaterTable(home, data.settings.recentGames) + "</div>" +
           '<div class="cols-2">' + goalieCard(away) + goalieCard(home) + "</div>") +
 
       (g.h2h.length ? '<div class="card panel"><h3>Recent meetings</h3><p class="hint">From ' + esc(home.short) + "'s side</p>" +
-        '<div class="games-list">' + g.h2h.map(function (x) { return gameRow(x, legsCfg, nfl); }).join("") + "</div></div>" : "") +
+        '<div class="games-list">' + g.h2h.map(function (x) { return gameRow(x, legsCfg, data.sport); }).join("") + "</div></div>" : "") +
       "</div></div>";
 
     app.querySelectorAll(".seg button").forEach(function (b) {
@@ -379,7 +390,7 @@
         ? '<img class="tr-img round" src="' + esc(t.headshot) + '" alt="" loading="lazy">'
         : '<img class="tr-img" src="' + esc(logo(g.teams[t.team])) + '" alt="">';
       return '<div class="trend" data-i="' + i + '">' + img +
-        '<div class="tr-main"><div class="tr-label">' + esc(t.label) + "</div>" +
+        '<div class="tr-main"><button class="tr-label tr-open" data-open="' + i + '" title="See every game and try other lines">' + esc(t.label) + ' <span class="tr-more">›</span></button>' +
         '<div class="tr-sub">' +
         '<span class="num"><b>' + t.hits + "/" + t.n + "</b> games</span>" +
         "<span>normal " + pct(t.base) + "</span>" +
@@ -409,7 +420,7 @@
         '<div class="panel-head"><div><h3>Trends <span class="count faint">' + list.length + "</span></h3>" +
         '<p class="hint" title="Hit in at least ' + pct(tcfg.min_hit_rate) + " of this season's games (min " + tcfg.min_games + ") and beat the league norm by " +
         Math.round((tcfg.min_gap || 0) * 100) + '+ points. The estimate next to your odds is pulled toward normal, because short streaks overstate things.">' +
-        "Bets that keep hitting this season, well above the league norm. Type your odds to check one.</p></div>" +
+        "Bets that keep hitting this season, well above the league norm. Click one to see every game and try other lines.</p></div>" +
         '<div class="seg">' + f("all", "All") + f("team", "Team") + f("player", "Players") + f(g.away, g.away) + f(g.home, g.home) + "</div></div>" +
         (shown.length ? '<div class="trend-list">' + shown.map(function (x) { return row(x[0], x[1]); }).join("") + "</div>"
           : '<div class="bempty">Nothing unusual enough for this game with the current thresholds (config.yaml → trends).</div>');
@@ -435,6 +446,7 @@
       var b = ev.target.closest("button");
       if (!b) return;
       if (b.hasAttribute("data-f")) { filter = b.getAttribute("data-f"); render(); return; }
+      if (b.hasAttribute("data-open")) { openTrend(data, g, list[+b.getAttribute("data-open")]); return; }
       if (b.hasAttribute("data-add")) {
         var t = list[+b.getAttribute("data-add")];
         var B = builderState(g.id);
@@ -464,15 +476,161 @@
     render();
   }
 
-  function legsPanel(g, fav, dog, w, cfg) {
+  // ---------- trend popup: every game, any line ----------
+  // "At least N" / "at most N" on the raw per-game numbers, so a trend like
+  // "2+ field goals (5/5)" can be re-checked at 3+ or 5+ instantly.
+  function openTrend(data, g, t) {
+    var minEdge = (data.settings.builder || {}).min_edge || 0.05;
+    var fmt = pref("sf-odds", "decimal");
+    var unit = data.sport === "nhl" ? "goals" : "points";
+    var src = t.prop || t.leg || {};
+    var spread = src.m === "spread";
+    var lined = t.kind === "player" || (t.leg && t.leg.line != null);
+    var mode = spread || src.side !== "under" ? "min" : "max";
+    var N = !lined ? null : spread ? Math.round(-src.line + 0.5) : mode === "min" ? Math.round(src.line + 0.5) : Math.round(src.line - 0.5);
+    var dist = (data.trendDist || {})[t.dk] || null;
+    var odds = null;
+
+    function ok(v) { return v == null ? null : !lined ? !!v : mode === "min" ? v >= N : v <= N; }
+    function base() {
+      if (!lined) return t.base;
+      if (!dist) return null;
+      var tot = 0, hit = 0;
+      dist.forEach(function (x) { tot += x[1]; if (ok(x[0])) hit += x[1]; });
+      return tot ? hit / tot : null;
+    }
+    function lineText() { return mode === "min" ? N + "+" : "at most " + N; }
+    function scopeText(sc) {
+      return !sc || sc === "game" ? "" : " (" + (Bets.SCOPES[sc] || sc).toLowerCase() + ")";
+    }
+    function label() {
+      if (!lined) return t.label;
+      if (t.kind === "player") return t.name + " " + lineText() + " " + (t.what || t.prop.stat);
+      if (spread) return t.team + " wins by " + N + "+";
+      var own = (t.leg.t === "home") === (t.team === g.home);
+      if (t.leg.m === "team") return t.team + (own ? " scores " : " allows ") + lineText() + " " + unit + scopeText(t.leg.s);
+      return t.team + " games: " + lineText() + " total " + unit + scopeText(t.leg.s);
+    }
+    // The bet in sportsbook terms (.5 lines), for the builder and saved bets.
+    function leg() {
+      var l = Object.assign({}, src);
+      if (lined) {
+        if (spread) l.line = -(N - 0.5);
+        else { l.side = mode === "min" ? "over" : "under"; l.line = mode === "min" ? N - 0.5 : N + 0.5; }
+      }
+      if (t.kind === "player") l = Object.assign({ m: "prop", s: "game", name: t.name, pos: t.pos }, l);
+      return l;
+    }
+    function bookText() {
+      var l = leg();
+      if (spread) return "spread " + l.line;
+      return l.side + " " + l.line;
+    }
+
+    var wrap = document.createElement("div");
+    wrap.className = "modal-back";
+    wrap.innerHTML = '<div class="modal card" role="dialog" aria-modal="true" aria-label="Trend details"></div>';
+    document.body.appendChild(wrap);
+    document.body.classList.add("modal-open");
+    var box = wrap.firstChild;
+    function close() { wrap.remove(); document.body.classList.remove("modal-open"); document.removeEventListener("keydown", onKey); }
+    function onKey(ev) { if (ev.key === "Escape") close(); }
+    document.addEventListener("keydown", onKey);
+    wrap.addEventListener("click", function (ev) { if (ev.target === wrap) close(); });
+
+    function render() {
+      var flags = t.vals.map(ok);
+      var counted = flags.filter(function (f) { return f !== null; });
+      var hits = counted.filter(Boolean).length, n = counted.length;
+      var b = base(), rate = n ? hits / n : null;
+      var est = n && b != null ? (hits + 5 * b) / (n + 5) : rate;
+      var v = Bets.verdict(est, odds, minEdge);
+      var img = t.kind === "player" ? '<img class="tr-img round" src="' + esc(t.headshot) + '" alt="">' : '<img class="tr-img" src="' + esc(logo(g.teams[t.team])) + '" alt="">';
+      var nums = lined ? t.vals.filter(function (x) { return x != null; }) : [];
+      var avg = nums.length ? nums.reduce(function (a, c) { return a + c; }, 0) / nums.length : null;
+
+      box.innerHTML =
+        '<div class="m-head">' + img + '<div class="m-title"><h3>' + esc(label()) + "</h3>" +
+        '<p class="hint">' + esc(t.kind === "player" ? t.team + " · " + t.pos : t.team) + " · this season, newest first" + (avg != null ? " · avg " + num(avg, 1) : "") + "</p></div>" +
+        '<button class="icon-btn m-x" data-act="close" aria-label="Close">' + ICON.x + "</button></div>" +
+        (lined ? '<div class="m-line">' +
+          '<div class="seg">' + (spread ? '<button class="on">Wins by at least</button>'
+            : '<button data-mode="min" class="' + (mode === "min" ? "on" : "") + '">At least</button><button data-mode="max" class="' + (mode === "max" ? "on" : "") + '">At most</button>') + "</div>" +
+          '<div class="stepper"><button class="icon-btn" data-step="-1" aria-label="Lower">−</button>' +
+          '<input id="mN" type="number" inputmode="numeric" value="' + N + '" aria-label="Number">' +
+          '<button class="icon-btn" data-step="1" aria-label="Higher">+</button></div>' +
+          '<span class="faint">= ' + esc(bookText()) + " at the book</span></div>" : "") +
+        '<div class="m-stats">' +
+        '<div class="bnum"><span class="k">Hit</span><b class="num accent">' + hits + "/" + n + "</b></div>" +
+        '<div class="bnum"><span class="k">Rate</span><b class="num">' + pct(rate) + "</b></div>" +
+        '<div class="bnum"><span class="k">League normal</span><b class="num">' + pct(b) + "</b></div>" +
+        '<div class="bnum"><span class="k" title="Pulled toward normal as if we had also seen 5 normal games">Estimate</span><b class="num">' + pct(est) + "</b></div></div>" +
+        '<div class="m-games">' + t.vals.map(function (x, k) {
+          var f = flags[k];
+          return '<div class="mg ' + (f === null ? "na" : f ? "hit" : "miss") + '" title="' + esc(t.tags[k] || "") + '">' +
+            "<b>" + (x == null ? "–" : lined ? x : f ? "✓" : "✗") + "</b><span>" + esc((t.tags[k] || "").replace(/^(\d\d)-(\d\d)/, "$1/$2")) + "</span></div>";
+        }).join("") + "</div>" +
+        '<div class="m-foot"><input class="tr-odds" id="mOdds" inputmode="decimal" placeholder="' + (fmt === "american" ? "+150" : "odds") + '" value="' + esc(odds ? Bets.fromDecimal(odds, fmt) : "") + '" aria-label="Your odds">' +
+        '<span class="m-verdict">' + (v ? '<span class="vpill v-' + v.call + '">' + v.call + " · " + pct(est) + " vs " + pct(v.implied) + "</span>" : '<span class="faint">Type your odds to check this line</span>') + "</span>" +
+        '<span class="m-sp"></span>' +
+        (t.leg || t.prop ? '<button class="icon-btn" data-act="builder">+ Builder</button>' : "") +
+        '<button class="icon-btn primary" data-act="save"' + (v ? "" : " disabled") + ">Save bet</button></div>";
+      return { est: est, rate: rate, v: v };
+    }
+
+    var cur = render();
+    box.addEventListener("click", function (ev) {
+      var b = ev.target.closest("button");
+      if (!b) return;
+      if (b.hasAttribute("data-mode")) { mode = b.getAttribute("data-mode"); cur = render(); return; }
+      if (b.hasAttribute("data-step")) { N = Math.max(spread ? -99 : 0, N + +b.getAttribute("data-step")); cur = render(); return; }
+      var act = b.getAttribute("data-act");
+      if (act === "close") return close();
+      if (act === "builder") {
+        var B = builderState(g.id);
+        B.legs.push(leg());
+        persistBuilder(g.id);
+        initBuilder(data, g);
+        close();
+        toast("Added to the bet builder");
+      }
+      if (act === "save") {
+        var l = leg();
+        l.label = label();
+        var all = Bets.loadBets();
+        all.push({
+          id: Date.now().toString(36), sport: data.sport, date: data.date, gameId: g.id, home: g.home, away: g.away,
+          legs: [l], odds: odds, method: "trend", prob: cur.est, probHist: cur.rate,
+          call: cur.v ? cur.v.call : null, savedAt: new Date().toISOString(),
+        });
+        Bets.saveBets(all);
+        updateBetCount();
+        toast("Saved to My bets");
+      }
+    });
+    box.addEventListener("change", function (ev) {
+      if (ev.target.id === "mN") { N = Math.round(+ev.target.value || 0); cur = render(); }
+    });
+    box.addEventListener("input", function (ev) {
+      if (ev.target.id !== "mOdds") return;
+      odds = Bets.toDecimal(ev.target.value, fmt);
+      var pos = ev.target.selectionStart;
+      cur = render();
+      var el = document.getElementById("mOdds");
+      el.focus();
+      try { el.setSelectionRange(pos, pos); } catch (e) {}
+    });
+  }
+
+  function legsPanel(g, fav, dog, w, cfg, sport) {
     var fl = fav.legs[w] || {}, dl = dog.legs[w] || {};
     var r = g.result;
-    var nfl = !!g.lines;
+    var nfl = sport !== "nhl";
     var legs = [
       { key: "ml", name: fav.abbrev + " moneyline", fl: "won", dl: "lost", res: r && r.legs.ml },
       { key: "over", name: nfl ? "Over the posted total" + (g.lines.total ? " (" + g.lines.total + ")" : "")
           : "Over " + cfg.regulation_total_line + " (regulation)", fl: "over", dl: "over", res: r && r.legs.over },
-      { key: "firstPeriod", name: nfl ? fav.abbrev + " scores in Q1" : fav.abbrev + " 1st period o" + cfg.first_period_team_line,
+      { key: "firstPeriod", name: sport === "nba" ? fav.abbrev + " wins the 1st half" : nfl ? fav.abbrev + " scores in Q1" : fav.abbrev + " 1st period o" + cfg.first_period_team_line,
         fl: "scored", dl: "allowed", res: r && r.legs.firstPeriod },
       { key: "all3", name: "All three together", fl: "all 3", dl: "all 3", res: r && r.legs.all3 },
     ];
@@ -597,7 +755,7 @@
           '<div id="bOut" class="bout"></div></div>' : "") +
         '<details class="bhelp"><summary>How is this calculated?</summary><ul>' +
         "<li><b>Simulation</b> plays this matchup 20,000 times using both teams' scoring (my attack vs. their defense, per " +
-        (isNFL(data) ? "quarter, in touchdowns and field goals" : "period") + "). Legs are checked together in the same simulated games, so related legs (a blowout + the over) are counted properly.</li>" +
+        (isNFL(data) ? "quarter, in touchdowns and field goals" : isNBA(data) ? "quarter, with a shared pace swing" : "period") + "). Legs are checked together in the same simulated games, so related legs (a blowout + the over) are counted properly.</li>" +
         "<li><b>History</b> replays each team's real games as if they were tonight's game and counts how many would have won the bet.</li>" +
         "<li><b>Player props</b> use the player's own games this season (simulation: their average turned into a probability; history: how often they went over that line). They're combined with the other legs as if independent.</li>" +
         "<li><b>Favorable</b> means our estimate beats the chance your odds imply by at least " + Math.round(minEdge * 100) + "%. Confidence depends on how many games the estimate is based on.</li>" +
@@ -697,7 +855,11 @@
       if (act === "add") B.legs.push(Bets.defaults("win", favSide));
       if (act === "addprop") B.legs.push(setupProp(Bets.defaults("prop", favSide)));
       if (act === "combo") {
-        B.legs = B.legs.concat(isNFL(data) ? [
+        B.legs = B.legs.concat(isNBA(data) ? [
+          { m: "win", s: "game", t: favSide },
+          { m: "total", s: "game", side: "over", line: (g.lines && g.lines.total) || cfg.total_line_fallback },
+          { m: "win", s: "h1", t: favSide },
+        ] : isNFL(data) ? [
           { m: "win", s: "game", t: favSide },
           { m: "total", s: "game", side: "over", line: (g.lines && g.lines.total) || cfg.total_line_fallback },
           { m: "team", s: "p1", t: favSide, side: "over", line: cfg.first_quarter_team_line },
@@ -760,9 +922,26 @@
     }).join("") + "</div>";
   }
 
-  function compare(a, b, w, nfl) {
+  function compare(a, b, w, sport) {
     var A = a[w] || {}, B = b[w] || {};
-    var rows = nfl ? [
+    var rows = sport === "nba" ? [
+      ["Points for", A.gfPg, B.gfPg, true, 1],
+      ["Points against", A.gaPg, B.gaPg, false, 1],
+      ["Point diff", A.gdPg, B.gdPg, true, 1],
+      ["Game total (both)", A.regTotalPg, B.regTotalPg, null, 1],
+      ["FG %", A.fgPct, B.fgPct, true, "%"],
+      ["3PT made", A.fg3mPg, B.fg3mPg, true, 1],
+      ["3PT %", A.fg3Pct, B.fg3Pct, true, "%"],
+      ["3PT allowed", A.fg3mAPg, B.fg3mAPg, false, 1],
+      ["Rebounds", A.rebPg, B.rebPg, true, 1],
+      ["Rebounds allowed", A.rebAPg, B.rebAPg, false, 1],
+      ["Assists", A.astPg, B.astPg, true, 1],
+      ["Win %", A.winPct, B.winPct, true, "%"],
+      ["Covers spread", A.atsPct, B.atsPct, true, "%"],
+      ["Over posted total", A.overPct, B.overPct, null, "%"],
+      ["Wins 1st quarter", A.q1WinPct, B.q1WinPct, true, "%"],
+      ["Leads at half", A.h1WinPct, B.h1WinPct, true, "%"],
+    ] : sport === "nfl" ? [
       ["Points for", A.gfPg, B.gfPg, true, 1],
       ["Points against", A.gaPg, B.gaPg, false, 1],
       ["Point diff", A.gdPg, B.gdPg, true, 1],
@@ -834,10 +1013,16 @@
       '<span><i style="background:var(--home);opacity:.35"></i>' + esc(b.abbrev) + " allowed</span></div>";
   }
 
-  function gameRow(x, cfg, nfl) {
+  function gameRow(x, cfg, sport) {
     var p = x.periods.map(function (q) { return "<b>" + q[0] + "</b>-" + q[1]; }).join(" · ");
     var tags;
-    if (nfl) {
+    if (sport === "nba") {
+      var ov = x.totalLine != null && x.regTotal > x.totalLine;
+      var h1 = x.periods[0][0] + x.periods[1][0] > x.periods[0][1] + x.periods[1][1];
+      tags = (x.totalLine != null ? '<span class="tag' + (ov ? " on" : "") + '" title="Over the posted total ' + x.totalLine + '">O' + x.totalLine + "</span>" : "") +
+        (x.spread != null ? '<span class="tag' + (x.gf - x.ga + x.spread > 0 ? " on" : "") + '" title="Covered the spread ' + x.spread + '">ATS</span>' : "") +
+        '<span class="tag' + (h1 ? " on" : "") + '" title="Led at halftime">1H</span>';
+    } else if (sport === "nfl") {
       var over = x.totalLine != null && x.regTotal > x.totalLine;
       var ats = x.spread != null && x.gf - x.ga + x.spread > 0;
       tags = '<span class="tag' + (over ? " on" : "") + '" title="Over the posted total ' + (x.totalLine || "") + '">O' + (x.totalLine || "") + "</span>" +
@@ -854,13 +1039,15 @@
       ' <span class="pl">' + p + "</span></span>" +
       '<span class="tags">' + tags + "</span></div>";
   }
-  function recentList(t, cfg, nfl) {
+  function recentList(t, cfg, sport) {
     var cur = t.lastGames.length ? t.lastGames[0].season : null;
     var rows = t.lastGames.map(function (x) {
-      return gameRow(Object.assign({}, x, { prior: x.season !== cur }), cfg, nfl);
+      return gameRow(Object.assign({}, x, { prior: x.season !== cur }), cfg, sport);
     }).join("");
     return '<div class="card panel"><h3><img src="' + esc(logo(t)) + '" alt="" style="width:22px;height:22px;display:inline-block;vertical-align:-5px;margin-right:6px">' +
-      esc(t.short) + ' — last 10</h3><p class="hint">' + (nfl
+      esc(t.short) + ' — last 10</h3><p class="hint">' + (sport === "nba"
+        ? "Quarter scores shown as team-opponent · <b>O</b> = went over the posted total · <b>ATS</b> = covered the spread · <b>1H</b> = led at halftime · faded = last season"
+        : sport === "nfl"
         ? "Quarter scores shown as team-opponent · <b>O</b> = went over the posted total · <b>ATS</b> = covered the spread · <b>Q1</b> = scored in Q1 · faded = last season"
         : "Period scores shown as team-opponent · <b>O</b> = regulation over · <b>1P</b> = scored in the 1st · faded = last season") + "</p>" +
       '<div class="games-list">' + rows + "</div></div>";
@@ -975,6 +1162,26 @@
       (b._status === "won" || b._status === "lost" ? '<span class="num" style="color:var(--' + (b._status === "won" ? "good" : "bad") + ')">' +
         (b._status === "won" ? "+" + (b.odds - 1).toFixed(2) : "−1.00") + "u</span>" : "") +
       '<button class="bc-del" data-del="' + esc(b.id) + '" aria-label="Delete bet">' + ICON.x + "</button></div></div>";
+  }
+
+  // ---------- NBA players + injury report ----------
+  function nbaPlayers(t) {
+    var rows = (t.keyPlayers || []).map(function (p) {
+      return '<div class="kp' + (p.injury ? " hurt" : "") + '"><img src="' + esc(p.headshot) + '" alt="" loading="lazy"><div><div class="gn">' + esc(p.name) +
+        ' <span class="pos">' + esc(p.pos) + "</span>" + (p.injury ? ' <span class="inj">' + esc(p.injury) + "</span>" : "") + "</div>" +
+        '<div class="gm">' + p.ptsPg + " pts · " + p.rebPg + " reb · " + p.astPg + " ast · " + p.fg3mPg + " 3PM · " + p.minPg + " min</div></div>" +
+        '<div class="gs"><b class="num">' + p.gp + "</b><div>GP</div></div></div>";
+    }).join("");
+    var inj = t.injuries;
+    var injHtml = inj == null ? '<p class="faint">Injury report only shown for today and upcoming games.</p>'
+      : !inj.length ? '<p class="faint">Nobody on the injury report.</p>'
+      : inj.map(function (x) {
+          return '<div class="injrow" title="' + esc(x.comment || "") + '"><span class="inj s-' + esc((x.status || "").replace(/\W/g, "")) + '">' + esc(x.status) + "</span>" +
+            "<b>" + esc(x.name) + '</b> <span class="faint">' + esc(x.pos || "") + (x.date ? " · " + esc(x.date.slice(5)) : "") + "</span></div>";
+        }).join("");
+    return '<div class="card panel"><h3>' + esc(t.short) + ' — top scorers</h3><p class="hint">Per-game averages this season (games before this date).</p>' +
+      (rows || '<p class="faint">No player data yet.</p>') +
+      '<h3 style="margin-top:16px">Injury report</h3><p class="hint">From ESPN. Hover a name for the latest note.</p>' + injHtml + "</div>";
   }
 
   // ---------- NFL key players ----------

@@ -10,7 +10,7 @@
  *
  * Every estimate works on "outcomes": { p: [[h,a], ...one per period], fh, fa }
  * (score per period home/away, and the final score incl. OT).
- * The sport (NHL: 3 periods of goals, NFL: 4 quarters of points) comes from
+ * The sport (NHL: 3 periods of goals, NFL/NBA: 4 quarters of points) comes from
  * the data file's settings via configure().
  */
 (function () {
@@ -27,8 +27,8 @@
 
   // Called with a data file's settings before building legs for that sport.
   function configure(settings) {
-    SPORT = settings.periods === 4 ? "nfl" : "nhl";
-    UNIT = SPORT === "nfl" ? "points" : "goals";
+    SPORT = settings.sport || (settings.periods === 4 ? "nfl" : "nhl");
+    UNIT = SPORT === "nhl" ? "goals" : "points";
     var scopes = settings.scopes || [
       { key: "game", label: "Full game" }, { key: "reg", label: "Regulation" },
       { key: "p1", label: "1st period" }, { key: "p2", label: "2nd period" }, { key: "p3", label: "3rd period" },
@@ -37,7 +37,7 @@
     scopes.forEach(function (x) { SCOPES[x.key] = x.label; });
     MARKETS = {};
     (settings.markets || Object.keys(ALL_MARKETS)).forEach(function (k) { MARKETS[k] = ALL_MARKETS[k]; });
-    if (SPORT === "nfl") MARKETS.spread = "Spread";
+    if (SPORT !== "nhl") MARKETS.spread = "Spread";
     else MARKETS.spread = "Puck line";
     DEFAULTS = settings.lineDefaults || { total: 5.5, totalScope: "reg", team: 0.5, teamScope: "p1", spread: -1.5 };
     PROP_STATS = settings.propStats || [];
@@ -242,7 +242,12 @@
 
   function range(n) { var r = []; for (var i = 0; i < n; i++) r.push(i); return r; }
 
-  // Returns Int8Array with (periods*2 + 2) values per simulated game:
+  function normal(rnd) {
+    var u = 1 - rnd(), v = rnd();
+    return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+  }
+
+  // Returns Int16Array with (periods*2 + 2) values per simulated game:
   // p1h, p1a, p2h, p2a, ..., finalHome, finalAway
   var simCache = {};
   function simulate(game, settings, win) {
@@ -261,7 +266,11 @@
     var sum = function (x) { return x.reduce(function (s, v) { return s + v; }, 0); };
     var homeOtShare = sum(lh) / (sum(lh) + sum(la));
 
-    var nfl = nP === 4;
+    var sport = settings.sport || (nP === 4 ? "nfl" : "nhl");
+    var nfl = sport === "nfl", nba = sport === "nba";
+    // NBA: quarter points are roughly bell-shaped; a shared pace factor moves both teams together.
+    var qsd = cfg.quarter_sd || 7, paceSd = cfg.pace_sd == null ? 0.04 : cfg.pace_sd;
+    function nbaPoints(lambda, pace, rnd) { return Math.max(0, Math.round(lambda * pace + qsd * normal(rnd))); }
     var otGoal = cfg.ot_goal_prob == null ? 0.62 : cfg.ot_goal_prob;
     var otDecided = cfg.ot_decided_prob == null ? 0.9 : cfg.ot_decided_prob;
     // NFL: points come as touchdowns (7) and field goals (3), split using each team's TD share.
@@ -272,17 +281,26 @@
     }
 
     var rnd = mulberry32(parseInt(String(game.id).replace(/\D/g, "").slice(-9), 10) || 1);
-    var out = new Int8Array(N * stride);
+    var out = new Int16Array(N * stride);
     for (var n = 0; n < N; n++) {
       var th = 0, ta = 0, o = n * stride;
+      var pace = nba ? 1 + paceSd * normal(rnd) : 1;
       for (var i = 0; i < nP; i++) {
-        var h = nfl ? nflPoints(lh[i], tdH, rnd) : poisson(lh[i], rnd);
-        var a = nfl ? nflPoints(la[i], tdA, rnd) : poisson(la[i], rnd);
+        var h = nfl ? nflPoints(lh[i], tdH, rnd) : nba ? nbaPoints(lh[i], pace, rnd) : poisson(lh[i], rnd);
+        var a = nfl ? nflPoints(la[i], tdA, rnd) : nba ? nbaPoints(la[i], pace, rnd) : poisson(la[i], rnd);
         out[o + i * 2] = h; out[o + i * 2 + 1] = a;
         th += h; ta += a;
       }
       if (th === ta) {
-        if (nfl) {
+        if (nba) {
+          // 5-minute overtimes until someone wins.
+          var otH = sum(lh) * 5 / 48, otA = sum(la) * 5 / 48, otSd = qsd * Math.sqrt(5 / 12);
+          for (var k = 0; k < 6 && th === ta; k++) {
+            th += Math.max(0, Math.round(otH + otSd * normal(rnd)));
+            ta += Math.max(0, Math.round(otA + otSd * normal(rnd)));
+          }
+          if (th === ta) { if (rnd() < homeOtShare) th++; else ta++; }
+        } else if (nfl) {
           // Most NFL overtimes end with a field goal or TD; some end tied.
           if (rnd() < otDecided) { var pts = rnd() < 0.55 ? 3 : 6; if (rnd() < homeOtShare) th += pts; else ta += pts; }
         } else {
@@ -291,7 +309,7 @@
           if (homeWins) th++; else ta++;
         }
       }
-      out[o + nP * 2] = Math.min(127, th); out[o + nP * 2 + 1] = Math.min(127, ta);
+      out[o + nP * 2] = th; out[o + nP * 2 + 1] = ta;
     }
     var res = { data: out, n: N, stride: stride, periods: nP, lambdaHome: lh, lambdaAway: la };
     simCache[key] = res;
