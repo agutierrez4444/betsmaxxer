@@ -70,6 +70,13 @@
     document.querySelectorAll(".sport-switch a").forEach(function (a) {
       a.classList.toggle("active", a.getAttribute("data-sport") === sport);
     });
+    if (sport === "soccer") {
+      // soccer leagues behave like their own sport: "soccer/eng.1"
+      if (!parts[1]) return renderLeagues();
+      currentSport = "soccer/" + parts[1];
+      if (parts[3]) return renderGame(currentSport, parts[2], parts[3]);
+      return renderDay(currentSport, parts[2]);
+    }
     document.querySelector(".mybets").classList.toggle("active", sport === "bets");
     if (sport === "bets") return renderBets();
     if (sport !== "nfl" && sport !== "nba") sport = "nhl";
@@ -101,13 +108,16 @@
   }
   function isNFL(data) { return data && data.sport === "nfl"; }
   function isNBA(data) { return data && data.sport === "nba"; }
+  function isSoccer(data) { return data && kind(data.sport) === "soccer"; }
+  function kind(sport) { return String(sport || "").split("/")[0]; }
   // Words that change with the sport.
   function words(sport) {
     return {
       nhl: { unit: "goal", venue: "ice", period: "period", leg3: "Fav scores 1st", over: "Over (reg.)" },
       nfl: { unit: "point", venue: "field", period: "quarter", leg3: "Fav scores Q1", over: "Over (posted)" },
       nba: { unit: "point", venue: "court", period: "quarter", leg3: "Fav wins 1st half", over: "Over (posted)" },
-    }[sport] || {};
+      soccer: { unit: "goal", venue: "ground", period: "half", leg3: "Fav scores 1st half", over: "Over 1.5" },
+    }[kind(sport)] || {};
   }
   function fmtRange(a, b) {
     var x = fmtDay(a, { month: "short", day: "numeric" });
@@ -162,13 +172,14 @@
       '<div class="datebar"><div>' +
       "<h1>" + (nfl ? esc(data.label) + ' <span class="h1-sub">' + fmtRange(data.start, data.end) + "</span>"
         : fmtDay(date, { weekday: "long", month: "long", day: "numeric" })) + "</h1>" +
-      '<div class="sub">' + data.games.length + " games · " + flagged.length + " worth a look" +
+      '<div class="sub">' + (isSoccer(data) ? esc(data.leagueName) + " · " : "") + data.games.length + (isSoccer(data) ? (data.games.length === 1 ? " match · " : " matches · ") : " games · ") + flagged.length + " worth a look" +
       (isToday ? "" : isPast ? (nfl ? " · past week, results shown" : " · past day, results shown") : " · upcoming") + "</div></div>" +
       '<div class="date-nav">' +
       '<a class="icon-btn" ' + (prev ? 'href="' + S + prev.date + '"' : 'aria-disabled="true" style="opacity:.35;pointer-events:none"') + ' aria-label="Previous">' + ICON.left + "</a>" +
       '<a class="icon-btn" href="#/' + data.sport + '">' + (nfl ? "This week" : "Today") + "</a>" +
       '<a class="icon-btn" ' + (next ? 'href="' + S + next.date + '"' : 'aria-disabled="true" style="opacity:.35;pointer-events:none"') + ' aria-label="Next">' + ICON.right + "</a>" +
       "</div></div>" +
+      (isSoccer(data) ? leagueChips(data.league) : "") +
       '<div class="day-strip">' + strip + "</div>" +
       '<div class="explain card"><div class="ex-icon" aria-hidden="true">' + ring(72) + "</div><div>" +
       "<b>What's the Stomp Index?</b> Every game gets a 0–100 score from simple rules: the favorite scores a lot, the underdog allows a lot, " +
@@ -183,7 +194,7 @@
       (rest.length ? '<div class="section-title">Rest of the slate <span class="count">' + rest.length + "</span></div>" +
         '<div class="grid">' + rest.map(gameCard).join("") + "</div>" : "") +
       '<p class="note">Built ' + new Date(data.generatedAt).toLocaleString() + " · stats use games before this " + (nfl ? "week" : "date") +
-      " · recent window " + data.settings.recentGames + " games" + (nfl ? " · odds and lines from nflverse (closing lines)" : isNBA(data) ? " · odds, lines and injuries from ESPN (DraftKings)" : "") + "</p></div>";
+      " · recent window " + data.settings.recentGames + " games" + (nfl ? " · odds and lines from nflverse (closing lines)" : isNBA(data) ? " · odds, lines and injuries from ESPN (DraftKings)" : isSoccer(data) ? " · odds and stats from ESPN (DraftKings)" : "") + "</p></div>";
 
     var active = app.querySelector(".day-pill.active");
     if (active) active.scrollIntoView({ block: "nearest", inline: "center" });
@@ -234,14 +245,15 @@
       return '<span class="chip ' + (c.weight < 0 ? "bad" : "good") + '">' + esc(c.label) + "</span>";
     }).join("") + (met.length > 4 ? '<span class="chip">+' + (met.length - 4) + "</span>" : "");
 
+    if (g.lines && g.lines.draw && !r) chips = '<span class="chip">Draw ' + num(g.lines.draw, 2) + "</span>" + chips;
     var mk = marketFav(g);
     if (mk && mk !== fav) chips = '<span class="chip warn">Market favors ' + esc(mk) + "</span>" + chips;
 
     var legs = "";
     if (r) {
       legs = '<div class="legs-result">' +
-        legChip(fav + " ML", r.legs.ml) + legChip((g.lines ? "Total " : "Reg. total ") + r.regTotal, r.legs.over) +
-        legChip(fav + (currentSport === "nba" ? " 1st half" : g.lines ? " Q1" : " 1st"), r.legs.firstPeriod) + legChip("All 3", r.legs.all3) + "</div>";
+        legChip(fav + (kind(currentSport) === "soccer" ? " win" : " ML"), r.legs.ml) + legChip((kind(currentSport) === "soccer" ? "Goals " : g.lines ? "Total " : "Reg. total ") + r.regTotal, r.legs.over) +
+        legChip(fav + (currentSport === "nba" ? " 1st half" : kind(currentSport) === "soccer" ? " scores 1H" : g.lines ? " Q1" : " 1st"), r.legs.firstPeriod) + legChip("All 3", r.legs.all3) + "</div>";
     }
 
     var top = (g.stomp.flag ? '<span class="badge">' + esc(g.stomp.flag) + "</span>" : "<span>" + esc(g.venue || "") + "</span>") +
@@ -280,7 +292,7 @@
     var w = state.window;
     var legsCfg = data.settings.legs;
     var r = g.result;
-    var nfl = isNFL(data), nba = isNBA(data), pts = nfl || nba;
+    var nfl = isNFL(data), nba = isNBA(data), soc = isSoccer(data), pts = nfl || nba;
     Bets.configure(data.settings);
 
     function heroTeam(t) {
@@ -290,7 +302,7 @@
         '<span class="ha big ' + (isHome ? "h" : "a") + '">' + (isHome ? "HOME" : "AWAY") + "</span>" +
         '<img src="' + esc(logo(t)) + '" alt="">' +
         '<div class="nm">' + esc(t.name) + "</div>" +
-        '<div class="meta"><span>' + esc(t.record) + "</span>" + (t.streak ? "<span>Streak " + esc(t.streak) + "</span>" : "") +
+        '<div class="meta"><span>' + esc(t.record) + "</span>" + (t.streak ? "<span>" + (soc ? "Form " : "Streak ") + esc(t.streak) + "</span>" : "") +
         (t.odds ? '<span class="num">ML ' + num(t.odds, 2) + "</span>" : "") +
         (t.spread != null ? '<span class="num">' + (t.spread > 0 ? "+" : "") + t.spread + "</span>" : "") +
         "</div>" +
@@ -301,9 +313,11 @@
     }
 
     var mid = r
-      ? '<div class="hero-final">' + r.awayScore + " – " + r.homeScore + '</div><div class="when">Final' + (r.end !== "REG" ? " (" + r.end + ")" : "") + "</div>"
+      ? '<div class="hero-final">' + r.awayScore + " – " + r.homeScore + '</div><div class="when">Final' + (r.end !== "REG" ? " (" + r.end + ")" : "") +
+        (soc && r.periods ? "<br>Half-time " + r.periods[0][1] + " – " + r.periods[0][0] : "") + "</div>"
       : ring(g.stomp.score, true) + '<div class="when">' + new Date(g.startTimeUTC).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" }) +
-        " · " + fmtTime(g.startTimeUTC) + "<br>" + esc(away.short) + " @ " + esc(home.short) + (g.venue ? " · " + esc(g.venue) : "") + "</div>";
+        " · " + fmtTime(g.startTimeUTC) + "<br>" + esc(away.short) + " @ " + esc(home.short) + (g.venue ? " · " + esc(g.venue) : "") +
+        (g.lines && g.lines.draw ? '<br><span class="num">Draw ' + num(g.lines.draw, 2) + "</span>" : "") + "</div>";
     if (r) mid = ring(g.stomp.score, true) + mid;
 
     var seg = '<div class="seg" role="tablist">' +
@@ -316,14 +330,14 @@
 
     app.innerHTML =
       '<div class="fade-in">' +
-      '<a class="back" href="#/' + data.sport + "/" + data.date + '">' + ICON.left + "All games</a>" +
+      '<a class="back" href="#/' + data.sport + "/" + data.date + '">' + ICON.left + (soc ? esc(data.leagueName) : "All games") + "</a>" +
       '<div class="card hero">' + heroTeam(away) + '<div class="hero-mid">' + mid + "</div>" + heroTeam(home) + "</div>" +
 
       '<div class="stack">' +
       // Legs
       '<div class="card panel"><div class="panel-head"><div><h3>The 3 legs — how often they\'ve hit</h3>' +
       '<p class="hint">' + esc(fav.short) + " rates are from their games as the favorite side; " + esc(dog.short) +
-      " rates are the mirror image from theirs (lost, over, " + (nba ? "trailed at half" : nfl ? "allowed points in Q1" : "conceded in 1st") + "). " +
+      " rates are the mirror image from theirs (lost, over, " + (soc ? "conceded in the 1st half" : nba ? "trailed at half" : nfl ? "allowed points in Q1" : "conceded in 1st") + "). " +
       (nfl ? "The over uses each past game's posted total. " : nba ? "The over uses each past game's posted total when we have it (this season), otherwise " + legsCfg.total_line_fallback + ". " : "") +
       "Past results, not a prediction.</p></div>" + seg + "</div>" +
       legsPanel(g, fav, dog, w, legsCfg, data.sport) +
@@ -342,15 +356,16 @@
       "</div>" +
 
       // Periods
-      '<div class="card panel"><div class="panel-head"><div><h3>' + (pts ? "Points by quarter" : "Goals by period") + '</h3><p class="hint">Average ' +
-      (pts ? "points" : "goals") + " for and against per " + (pts ? "quarter" : "period") + " · " +
+      '<div class="card panel"><div class="panel-head"><div><h3>' + (pts ? "Points by quarter" : soc ? "Goals by half" : "Goals by period") + '</h3><p class="hint">Average ' +
+      (pts ? "points" : "goals") + " for and against per " + (pts ? "quarter" : soc ? "half" : "period") + " · " +
       (w === "recent" ? "last " + data.settings.recentGames : "season") + "</p></div>" + seg + "</div>" + periodChart(away, home, w) + "</div>" +
 
       // Recent games
       '<div class="cols-2">' + recentList(away, legsCfg, data.sport) + recentList(home, legsCfg, data.sport) + "</div>" +
 
       // Players
-      (nba ? '<div class="cols-2">' + nbaPlayers(away) + nbaPlayers(home) + "</div>"
+      (soc ? '<div class="cols-2">' + soccerPlayers(away) + soccerPlayers(home) + "</div>"
+        : nba ? '<div class="cols-2">' + nbaPlayers(away) + nbaPlayers(home) + "</div>"
         : nfl ? '<div class="cols-2">' + keyPlayers(away) + keyPlayers(home) + "</div>"
         : '<div class="cols-2">' + skaterTable(away, data.settings.recentGames) + skaterTable(home, data.settings.recentGames) + "</div>" +
           '<div class="cols-2">' + goalieCard(away) + goalieCard(home) + "</div>") +
@@ -402,7 +417,7 @@
         '<div class="tr-act">' +
         '<input class="tr-odds" data-i="' + i + '" inputmode="decimal" placeholder="' + (pref("sf-odds", "decimal") === "american" ? "+150" : "odds") + '" aria-label="Odds">' +
         '<span class="tr-v" data-v="' + i + '"></span>' +
-        (t.leg || t.prop ? '<button class="icon-btn sm" data-add="' + i + '" title="Add to bet builder">+ Builder</button>' : "") +
+        ((t.leg && t.leg.m !== "count") || t.prop ? '<button class="icon-btn sm" data-add="' + i + '" title="Add to bet builder">+ Builder</button>' : "") +
         '<button class="icon-btn sm" data-save="' + i + '" title="Save as a single bet" disabled>Save</button>' +
         "</div></div>";
     }
@@ -464,7 +479,7 @@
         var v = Bets.verdict(est(tr), odds[i], minEdge);
         var all = Bets.loadBets();
         all.push({
-          id: Date.now().toString(36), sport: data.sport, date: data.date, gameId: g.id, home: g.home, away: g.away,
+          id: Date.now().toString(36), sport: data.sport, league: data.leagueName, date: data.date, gameId: g.id, home: g.home, away: g.away,
           legs: [leg], odds: odds[i], method: "trend", prob: est(tr), probHist: tr.rate,
           call: v ? v.call : null, savedAt: new Date().toISOString(),
         });
@@ -482,7 +497,7 @@
   function openTrend(data, g, t) {
     var minEdge = (data.settings.builder || {}).min_edge || 0.05;
     var fmt = pref("sf-odds", "decimal");
-    var unit = data.sport === "nhl" ? "goals" : "points";
+    var unit = data.sport === "nhl" || isSoccer(data) ? "goals" : "points";
     var src = t.prop || t.leg || {};
     var spread = src.m === "spread";
     // Files built before the popup existed have no per-game numbers: show the summary only.
@@ -509,6 +524,11 @@
       if (!lined) return t.label;
       if (t.kind === "player") return t.name + " " + lineText() + " " + (t.what || t.prop.stat);
       if (spread) return t.team + " wins by " + N + "+";
+      if (t.leg.m === "count") {
+        var what = " " + t.leg.k;
+        if (t.leg.t === "both") return t.team + " matches: " + lineText() + what;
+        return t.team + ((t.leg.t === "home") === (t.team === g.home) ? " gets " : " opponents get ") + lineText() + what;
+      }
       var own = (t.leg.t === "home") === (t.team === g.home);
       if (t.leg.m === "team") return t.team + (own ? " scores " : " allows ") + lineText() + " " + unit + scopeText(t.leg.s);
       return t.team + " games: " + lineText() + " total " + unit + scopeText(t.leg.s);
@@ -576,7 +596,7 @@
         '<div class="m-foot"><input class="tr-odds" id="mOdds" inputmode="decimal" placeholder="' + (fmt === "american" ? "+150" : "odds") + '" value="' + esc(odds ? Bets.fromDecimal(odds, fmt) : "") + '" aria-label="Your odds">' +
         '<span class="m-verdict">' + (v ? '<span class="vpill v-' + v.call + '">' + v.call + " · " + pct(est) + " vs " + pct(v.implied) + "</span>" : '<span class="faint">Type your odds to check this line</span>') + "</span>" +
         '<span class="m-sp"></span>' +
-        (t.leg || t.prop ? '<button class="icon-btn" data-act="builder">+ Builder</button>' : "") +
+        ((t.leg && t.leg.m !== "count") || t.prop ? '<button class="icon-btn" data-act="builder">+ Builder</button>' : "") +
         '<button class="icon-btn primary" data-act="save"' + (v ? "" : " disabled") + ">Save bet</button></div>";
       return { est: est, rate: rate, v: v };
     }
@@ -602,7 +622,7 @@
         l.label = label();
         var all = Bets.loadBets();
         all.push({
-          id: Date.now().toString(36), sport: data.sport, date: data.date, gameId: g.id, home: g.home, away: g.away,
+          id: Date.now().toString(36), sport: data.sport, league: data.leagueName, date: data.date, gameId: g.id, home: g.home, away: g.away,
           legs: [l], odds: odds, method: "trend", prob: cur.est, probHist: cur.rate,
           call: cur.v ? cur.v.call : null, savedAt: new Date().toISOString(),
         });
@@ -628,12 +648,12 @@
   function legsPanel(g, fav, dog, w, cfg, sport) {
     var fl = fav.legs[w] || {}, dl = dog.legs[w] || {};
     var r = g.result;
-    var nfl = sport !== "nhl";
+    var soc = kind(sport) === "soccer", nfl = sport !== "nhl" && !soc;
     var legs = [
-      { key: "ml", name: fav.abbrev + " moneyline", fl: "won", dl: "lost", res: r && r.legs.ml },
-      { key: "over", name: nfl ? "Over the posted total" + (g.lines.total ? " (" + g.lines.total + ")" : "")
+      { key: "ml", name: fav.abbrev + (soc ? " to win" : " moneyline"), fl: "won", dl: "lost", res: r && r.legs.ml },
+      { key: "over", name: soc ? "Over " + cfg.total_line + " goals" : nfl ? "Over the posted total" + (g.lines.total ? " (" + g.lines.total + ")" : "")
           : "Over " + cfg.regulation_total_line + " (regulation)", fl: "over", dl: "over", res: r && r.legs.over },
-      { key: "firstPeriod", name: sport === "nba" ? fav.abbrev + " wins the 1st half" : nfl ? fav.abbrev + " scores in Q1" : fav.abbrev + " 1st period o" + cfg.first_period_team_line,
+      { key: "firstPeriod", name: soc ? fav.abbrev + " scores in the 1st half" : sport === "nba" ? fav.abbrev + " wins the 1st half" : nfl ? fav.abbrev + " scores in Q1" : fav.abbrev + " 1st period o" + cfg.first_period_team_line,
         fl: "scored", dl: "allowed", res: r && r.legs.firstPeriod },
       { key: "all3", name: "All three together", fl: "all 3", dl: "all 3", res: r && r.legs.all3 },
     ];
@@ -721,11 +741,11 @@
           '<select data-f="side">' + opt("over", "Over", leg.side) + opt("under", "Under", leg.side) + "</select>" +
           '<input data-f="line" type="number" step="0.5" value="' + esc(leg.line) + '" aria-label="Line">';
       } else {
-        var scopes = leg.m === "spread" && data.sport === "nhl" ? ["game", "reg"] : Object.keys(Bets.SCOPES);
+        var scopes = leg.m === "spread" && data.sport === "nhl" ? ["game", "reg"] : leg.m === "spread" && isSoccer(data) ? ["game"] : Object.keys(Bets.SCOPES);
         var pick = "", side = "", line = "";
         if (leg.m === "win" || leg.m === "team" || leg.m === "spread") {
           pick = '<select data-f="t">' + opt("away", g.away + " (away)", leg.t) + opt("home", g.home + " (home)", leg.t) +
-            (leg.m === "win" && leg.s !== "game" ? opt("draw", "Draw", leg.t) : "") + "</select>";
+            (leg.m === "win" && (leg.s !== "game" || isSoccer(data)) ? opt("draw", "Draw", leg.t) : "") + "</select>";
         }
         if (leg.m === "total" || leg.m === "team") side = '<select data-f="side">' + opt("over", "Over", leg.side) + opt("under", "Under", leg.side) + "</select>";
         if (leg.m === "btts") side = '<select data-f="side">' + opt("yes", "Yes", leg.side) + opt("no", "No", leg.side) + "</select>";
@@ -758,7 +778,7 @@
           '<div id="bOut" class="bout"></div></div>' : "") +
         '<details class="bhelp"><summary>How is this calculated?</summary><ul>' +
         "<li><b>Simulation</b> plays this matchup 20,000 times using both teams' scoring (my attack vs. their defense, per " +
-        (isNFL(data) ? "quarter, in touchdowns and field goals" : isNBA(data) ? "quarter, with a shared pace swing" : "period") + "). Legs are checked together in the same simulated games, so related legs (a blowout + the over) are counted properly.</li>" +
+        (isNFL(data) ? "quarter, in touchdowns and field goals" : isNBA(data) ? "quarter, with a shared pace swing" : isSoccer(data) ? "half" : "period") + "). Legs are checked together in the same simulated games, so related legs (a blowout + the over) are counted properly.</li>" +
         "<li><b>History</b> replays each team's real games as if they were tonight's game and counts how many would have won the bet.</li>" +
         "<li><b>Player props</b> use the player's own games this season (simulation: their average turned into a probability; history: how often they went over that line). They're combined with the other legs as if independent.</li>" +
         "<li><b>Favorable</b> means our estimate beats the chance your odds imply by at least " + Math.round(minEdge * 100) + "%. Confidence depends on how many games the estimate is based on.</li>" +
@@ -823,7 +843,7 @@
       } else {
         leg[f] = ev.target.value;
         if (f === "stat") leg.line = Bets.propDefaultLine(g, leg);
-        if (f === "s" && leg.t === "draw" && leg.s === "game") leg.t = favSide;
+        if (f === "s" && leg.t === "draw" && leg.s === "game" && !isSoccer(data)) leg.t = favSide;
       }
       persistBuilder(g.id);
       render();
@@ -858,7 +878,11 @@
       if (act === "add") B.legs.push(Bets.defaults("win", favSide));
       if (act === "addprop") B.legs.push(setupProp(Bets.defaults("prop", favSide)));
       if (act === "combo") {
-        B.legs = B.legs.concat(isNBA(data) ? [
+        B.legs = B.legs.concat(isSoccer(data) ? [
+          { m: "win", s: "game", t: favSide },
+          { m: "total", s: "game", side: "over", line: cfg.total_line },
+          { m: "team", s: "h1", t: favSide, side: "over", line: cfg.first_half_team_line },
+        ] : isNBA(data) ? [
           { m: "win", s: "game", t: favSide },
           { m: "total", s: "game", side: "over", line: (g.lines && g.lines.total) || cfg.total_line_fallback },
           { m: "win", s: "h1", t: favSide },
@@ -888,7 +912,7 @@
       var list = Bets.loadBets();
       list.push({
         id: Date.now().toString(36),
-        sport: data.sport, date: data.date, gameId: g.id, home: g.home, away: g.away,
+        sport: data.sport, league: data.leagueName, date: data.date, gameId: g.id, home: g.home, away: g.away,
         legs: B.legs.map(function (l) { return Object.assign({}, l, { label: Bets.label(l, g.home, g.away) }); }),
         odds: dec, method: method, window: bwin, prob: p, probSim: e.sim, probHist: e.hist.p,
         call: v ? v.call : null, savedAt: new Date().toISOString(),
@@ -927,7 +951,26 @@
 
   function compare(a, b, w, sport) {
     var A = a[w] || {}, B = b[w] || {};
-    var rows = sport === "nba" ? [
+    var rows = kind(sport) === "soccer" ? [
+      ["Goals for", A.gfPg, B.gfPg, true, 2],
+      ["Goals against", A.gaPg, B.gaPg, false, 2],
+      ["Goal diff", A.gdPg, B.gdPg, true, 2],
+      ["Points per game", A.ppg, B.ppg, true, 2],
+      ["Shots", A.shotsFPg, B.shotsFPg, true, 1],
+      ["Shots on target", A.sotFPg, B.sotFPg, true, 1],
+      ["On target allowed", A.sotAPg, B.sotAPg, false, 1],
+      ["Possession", A.possPct, B.possPct, true, "%"],
+      ["Corners won", A.cornersFPg, B.cornersFPg, true, 1],
+      ["Corners against", A.cornersAPg, B.cornersAPg, false, 1],
+      ["Cards", A.cardsPg, B.cardsPg, false, 1],
+      ["Win %", A.winPct, B.winPct, true, "%"],
+      ["Draw %", A.drawPct, B.drawPct, null, "%"],
+      ["Clean sheets", A.csPct, B.csPct, true, "%"],
+      ["Both teams score", A.bttsPct, B.bttsPct, null, "%"],
+      ["Over 2.5 goals", A.over25Pct, B.over25Pct, null, "%"],
+      ["Scores first", A.firstPct, B.firstPct, true, "%"],
+      ["Scores in 1st half", A.scored1pPct, B.scored1pPct, true, "%"],
+    ] : sport === "nba" ? [
       ["Points for", A.gfPg, B.gfPg, true, 1],
       ["Points against", A.gaPg, B.gaPg, false, 1],
       ["Point diff", A.gdPg, B.gdPg, true, 1],
@@ -1000,14 +1043,14 @@
     var bar = function (v, color, op) {
       return '<div style="height:' + ((v || 0) / max * 100) + "%;background:" + color + ";opacity:" + op + '"><span>' + num(v, 1) + "</span></div>";
     };
-    var n = Math.max(A.length, B.length, 3), q = n === 4;
+    var n = Math.max(A.length, B.length) || 3, q = n === 4;
     var html = '<div class="periods" style="grid-template-columns:repeat(' + n + ',1fr)">' + A.map(function (_, i) { return i; }).map(function (i) {
       var pa = A[i] || {}, pb = B[i] || {};
       return '<div class="period"><div class="bars">' +
         bar(pa.gf, "var(--away)", 1) + bar(pa.ga, "var(--away)", 0.35) +
         '<div style="width:10px;background:none"></div>' +
         bar(pb.gf, "var(--home)", 1) + bar(pb.ga, "var(--home)", 0.35) +
-        '</div><div class="lbl">' + (q ? "Q" + (i + 1) : ["1st", "2nd", "3rd"][i] + " period") + "</div></div>";
+        '</div><div class="lbl">' + (q ? "Q" + (i + 1) : n === 2 ? ["1st", "2nd"][i] + " half" : ["1st", "2nd", "3rd"][i] + " period") + "</div></div>";
     }).join("") + "</div>";
     return html + '<div class="key">' +
       '<span><i style="background:var(--away)"></i>' + esc(a.abbrev) + " scored</span>" +
@@ -1019,7 +1062,11 @@
   function gameRow(x, cfg, sport) {
     var p = x.periods.map(function (q) { return "<b>" + q[0] + "</b>-" + q[1]; }).join(" · ");
     var tags;
-    if (sport === "nba") {
+    if (kind(sport) === "soccer") {
+      tags = '<span class="tag' + (x.regTotal > 2.5 ? " on" : "") + '" title="Over 2.5 goals">O2.5</span>' +
+        '<span class="tag' + (x.gf > 0 && x.ga > 0 ? " on" : "") + '" title="Both teams scored">BTTS</span>' +
+        '<span class="tag' + (x.periods[0][0] > 0 ? " on" : "") + '" title="Scored in the 1st half">1H</span>';
+    } else if (sport === "nba") {
       var ov = x.totalLine != null && x.regTotal > x.totalLine;
       var h1 = x.periods[0][0] + x.periods[1][0] > x.periods[0][1] + x.periods[1][1];
       tags = (x.totalLine != null ? '<span class="tag' + (ov ? " on" : "") + '" title="Over the posted total ' + x.totalLine + '">O' + x.totalLine + "</span>" : "") +
@@ -1036,7 +1083,7 @@
         '<span class="tag' + (x.periods[0][0] > cfg.first_period_team_line ? " on" : "") + '">1P</span>';
     }
     return '<div class="gl-row' + (x.prior ? " prior" : "") + '" title="' + esc(x.date) + '">' +
-      '<span class="wl ' + (x.win ? "w" : x.gf === x.ga ? "" : "l") + '">' + (x.win ? "W" : x.gf === x.ga ? "T" : "L") + "</span>" +
+      '<span class="wl ' + (x.win ? "w" : x.gf === x.ga ? "" : "l") + '">' + (x.win ? "W" : x.gf === x.ga ? (kind(sport) === "soccer" ? "D" : "T") : "L") + "</span>" +
       '<span class="sc">' + x.gf + "-" + x.ga + (x.end !== "REG" ? "<small>" + x.end + "</small>" : "") + "</span>" +
       '<span><span class="faint">' + (x.home ? "vs" : "@") + "</span> " + esc(x.opp) +
       ' <span class="pl">' + p + "</span></span>" +
@@ -1048,7 +1095,9 @@
       return gameRow(Object.assign({}, x, { prior: x.season !== cur }), cfg, sport);
     }).join("");
     return '<div class="card panel"><h3><img src="' + esc(logo(t)) + '" alt="" style="width:22px;height:22px;display:inline-block;vertical-align:-5px;margin-right:6px">' +
-      esc(t.short) + ' — last 10</h3><p class="hint">' + (sport === "nba"
+      esc(t.short) + ' — last 10</h3><p class="hint">' + (kind(sport) === "soccer"
+        ? "Half scores shown as team-opponent · <b>O2.5</b> = over 2.5 goals · <b>BTTS</b> = both teams scored · <b>1H</b> = scored in the 1st half · faded = last season"
+        : sport === "nba"
         ? "Quarter scores shown as team-opponent · <b>O</b> = went over the posted total · <b>ATS</b> = covered the spread · <b>1H</b> = led at halftime · faded = last season"
         : sport === "nfl"
         ? "Quarter scores shown as team-opponent · <b>O</b> = went over the posted total · <b>ATS</b> = covered the spread · <b>Q1</b> = scored in Q1 · faded = last season"
@@ -1152,7 +1201,7 @@
       '<div class="bc-head">' +
       (t ? '<img src="' + esc(logo(t[b.away])) + '" alt=""><img src="' + esc(logo(t[b.home])) + '" alt="">' : "") +
       '<div><a href="#/' + (b.sport || "nhl") + "/" + b.date + "/" + b.gameId + '" class="bc-title">' + esc(b.away) + " @ " + esc(b.home) +
-      ' <span class="sport-tag">' + (b.sport || "nhl").toUpperCase() + "</span></a>" +
+      ' <span class="sport-tag">' + esc(b.league || (b.sport || "nhl").toUpperCase()) + "</span></a>" +
       '<div class="faint">' + (b._game ? new Date(b._game.startTimeUTC).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })
         : esc(b.date)) + (b._score ? " · " + esc(b._score) : "") + "</div></div>" +
       '<span class="status s-' + b._status + '">' + status + "</span></div>" +
@@ -1165,6 +1214,52 @@
       (b._status === "won" || b._status === "lost" ? '<span class="num" style="color:var(--' + (b._status === "won" ? "good" : "bad") + ')">' +
         (b._status === "won" ? "+" + (b.odds - 1).toFixed(2) : "−1.00") + "u</span>" : "") +
       '<button class="bc-del" data-del="' + esc(b.id) + '" aria-label="Delete bet">' + ICON.x + "</button></div></div>";
+  }
+
+  // ---------- soccer: league picker ----------
+  var leaguesCache = null;
+  function loadLeagues() {
+    if (!leaguesCache) leaguesCache = load("data/soccer/leagues.json").then(function (d) { return d.leagues; });
+    return leaguesCache;
+  }
+  function renderLeagues() {
+    loading();
+    loadLeagues().then(function (leagues) {
+      if (!leagues.length) throw new Error("No soccer data built yet");
+      app.innerHTML = '<div class="fade-in"><div class="datebar"><div><h1>Soccer</h1><div class="sub">Pick a league</div></div></div>' +
+        '<div class="grid leagues">' + leagues.map(function (l) {
+          return '<a class="card league-card" href="#/soccer/' + esc(l.key) + '">' +
+            (l.logo ? '<img src="' + esc(l.logo) + '" alt="" loading="lazy">' : "") +
+            '<div><div class="ln">' + esc(l.name) + '</div><div class="lc">' + esc(l.country || "") + "</div>" +
+            '<div class="lnext">' + (l.next ? "Next: " + fmtDay(l.next, { weekday: "short", month: "short", day: "numeric" }) + " · " + l.games + " match" + (l.games === 1 ? "" : "es") +
+              (l.flagged ? " · <b>" + l.flagged + "⚑</b>" : "") : "No upcoming matches") + "</div></div></a>";
+        }).join("") + "</div></div>";
+    }).catch(fail);
+  }
+  // Quick switch between leagues on a league's page.
+  function leagueChips(cur) {
+    var html = '<div class="league-chips" id="leagueChips"></div>';
+    loadLeagues().then(function (leagues) {
+      var el = document.getElementById("leagueChips");
+      if (!el) return;
+      el.innerHTML = leagues.map(function (l) {
+        return '<a class="lchip' + (l.key === cur ? " on" : "") + '" href="#/soccer/' + esc(l.key) + '">' +
+          (l.logo ? '<img src="' + esc(l.logo) + '" alt="">' : "") + esc(l.name) + "</a>";
+      }).join("");
+    }).catch(function () {});
+    return html;
+  }
+
+  function soccerPlayers(t) {
+    var rows = (t.keyPlayers || []).map(function (p) {
+      var line = p.pos === "G" ? p.savesPg + " saves/gm" : p.goals + " G · " + p.assists + " A · " + p.shotsPg + " shots · " + p.sotPg + " on target /gm";
+      return '<div class="kp">' + (p.headshot ? '<img src="' + esc(p.headshot) + '" alt="" loading="lazy">' : '<span class="kp-ph"></span>') +
+        '<div><div class="gn">' + esc(p.name) + ' <span class="pos">' + esc(p.pos) + "</span></div>" +
+        '<div class="gm">' + line + "</div></div>" +
+        '<div class="gs"><b class="num">' + p.gp + "</b><div>starts</div></div></div>";
+    }).join("");
+    return '<div class="card panel"><h3>' + esc(t.short) + ' — key players</h3><p class="hint">This season, matches they started (before this date).</p>' +
+      (rows || '<p class="faint">No player data yet.</p>') + "</div>";
   }
 
   // ---------- NBA players + injury report ----------

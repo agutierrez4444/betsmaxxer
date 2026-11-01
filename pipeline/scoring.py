@@ -142,7 +142,7 @@ def assign_flags(games, cfg):
         for g in ranked:
             if len(flagged) >= min_n:
                 break
-            if g not in flagged:
+            if g not in flagged and g["stomp"]["score"] >= cfg.get("fill_min_score", 0):
                 g["stomp"]["flag"] = "Best available"
                 flagged.append(g)
     return flagged

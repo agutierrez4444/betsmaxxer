@@ -1,7 +1,7 @@
 # BetsMaxxer
 
-An NHL, NFL and NBA dashboard. It lists every game on the slate (by day for NHL and NBA,
-by week for NFL), flags the ones that look like potential blowouts, and shows the stats you need to
+An NHL, NFL, NBA and soccer dashboard. It lists every game on the slate (by day for NHL,
+NBA and soccer, by week for NFL), flags the ones that look like potential blowouts, and shows the stats you need to
 judge them yourself. Each game page also has a bet builder to check your site's odds, plus
 a Trends panel listing team and player bets that keep hitting.
 
@@ -10,7 +10,7 @@ look them up by hand.
 
 ## Run it locally
 
-Double-click **`run.bat`**. It refreshes all three sports and opens http://localhost:8000.
+Double-click **`run.bat`**. It refreshes every sport and opens http://localhost:8000.
 Or run the steps yourself:
 
 ```bash
@@ -26,19 +26,25 @@ py -m pipeline.nba_build
 ```
 
 ```bash
+py -m pipeline.soccer_build
+```
+
+```bash
 py -m http.server 8000 -d site
 ```
 
 - **NHL:** `--days-back 14` rebuilds the last 14 days. `--date 2026-10-20` builds one day.
 - **NFL:** `--weeks-back 4` rebuilds earlier weeks. `--week 6` builds one week.
 - **NBA:** same options as NHL (`--days-back`, `--date`).
+- **Soccer:** builds every league in `config.yaml`, recent and upcoming match days. `--league eng.1`
+  builds one league. The first run downloads two seasons per league (several minutes).
 - First runs download last season and the box scores once (a minute or two). After that,
   everything finished is cached in `.cache/`.
 
 ## Tuning: `config.yaml`
 
-Everything adjustable lives in [config.yaml](config.yaml). It has an `nhl:`, an `nfl:` and an
-`nba:` section. Edit it and re-run the build.
+Everything adjustable lives in [config.yaml](config.yaml). It has `nhl:`, `nfl:`, `nba:` and `soccer:`
+sections. Edit it and re-run the build.
 
 | Setting | What it does |
 |---|---|
@@ -60,9 +66,21 @@ Each game is scored from both sides, and the higher side is the "stomp side".
 - **NHL:** favorite moneyline + regulation over 5.5 + favorite scores in the 1st period.
 - **NFL:** favorite moneyline + over the posted total + favorite scores in the 1st quarter.
 - **NBA:** favorite moneyline + over the posted total + favorite wins the 1st half.
+- **Soccer:** favorite to win + over 1.5 goals + favorite scores in the 1st half.
 
 NBA rules also look at back-to-backs, rest, the bookmaker's spread, and **today's injury
 report**: a favorite whose top-2 scorer is out loses points, and an underdog missing one gains points.
+
+## Soccer leagues
+
+The Soccer tab opens a league picker: Chile's Primera División, the Champions League, the
+Premier League, LaLiga, the Bundesliga, Serie A and Ligue 1. Add or remove leagues in
+`config.yaml → soccer → leagues` using ESPN's league key (for example `por.1` Portugal,
+`ned.1` Netherlands, `arg.1` Argentina, `bra.1` Brazil, `mex.1` Mexico, `usa.1` MLS,
+`uefa.europa` Europa League, `conmebol.libertadores` Copa Libertadores).
+
+Soccer adds draws (3-way odds), half-time scores, handicaps, and corner and card trends.
+Champions League teams play few matches, so their samples are thin; lean on the bookmaker check.
 
 ## Bet builder
 
@@ -88,6 +106,8 @@ for 1+ yards". Only lines sportsbooks really offer are checked:
 - **NHL players:** goals, assists, points, shots on goal; goalie saves
 - **NFL players:** passing/rushing/receiving yards, receptions, completions, TDs, field goals, kicking points
 - **NBA players:** points, rebounds, assists, threes, P+R+A and the other combos, steals + blocks
+- **Soccer players:** anytime scorer, assists, shots, shots on target, yellow cards; goalkeeper saves
+- **Soccer teams:** also corners (team and match) and cards
 - **Teams:** scoring in a period/quarter, team totals, game totals, winning a period or half,
   scoring first (NHL), covering the spread and going over the posted total (NFL, NBA)
 
@@ -118,7 +138,8 @@ NHL API / nflverse / ESPN  →  pipeline/ (Python)  →  site/data/<sport>/*.jso
 - `pipeline/scoring.py`, `pipeline/nfl_scoring.py`, `pipeline/nba_scoring.py`: flag conditions and tier logic.
 - `pipeline/trends.py`: the trend engine (hit rates, league norms, filters), shared by all sports.
 - `pipeline/nhl_trends.py`: the NHL list of props to check.
-- `pipeline/build.py` (NHL), `pipeline/nfl_build.py` (NFL), `pipeline/nba_build.py` (NBA): tie it together and write the JSON.
+- `pipeline/build.py` (NHL), `pipeline/nfl_build.py` (NFL), `pipeline/nba_build.py` (NBA),
+  `pipeline/soccer_build.py` + `soccer_api.py` + `soccer_scoring.py` (soccer): tie it together and write the JSON.
 - `site/`: plain HTML/CSS/JS with no build step. `bets.js` is the bet engine, `app.js` the pages.
 
 Stats for a date or week only use games played **before** it. So past pages show what the
@@ -141,6 +162,8 @@ panel works.
   (quarter scores, logos).
 - **NBA:** ESPN's public API (scoreboards with quarter scores and DraftKings lines, box
   scores, injury report). NBA.com's own stats site blocks automated requests, so it isn't used.
+- **Soccer:** ESPN's public API (match days, goal minutes, cards, team stats, DraftKings 3-way
+  odds, lineups with player stats).
 
 NHL "Likely starter" means the goalie with the most starts. Starters aren't confirmed in
 advance. NFL stats update the night after games.

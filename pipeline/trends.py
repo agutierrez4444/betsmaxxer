@@ -31,6 +31,8 @@ def mirror(o):
         m["first"] = "away" if o["first"] == "home" else "home"
     if o.get("spread") is not None:
         m["spread"] = -o["spread"]
+    if o.get("st"):  # per-team counts (corners, cards...): "F" = this team, "A" = opponent
+        m["st"] = {k[:-1] + ("A" if k.endswith("F") else "F"): v for k, v in o["st"].items()}
     return m
 
 
@@ -51,7 +53,21 @@ def _goals(o, scope):
     return sum(o["p"][i][0] for i in idx), sum(o["p"][i][1] for i in idx)
 
 
+def _count(leg, o):
+    """Counting stats (corners, cards): t = home (this team), away (opponent) or both."""
+    st = o.get("st") or {}
+    f, a = st.get(leg["k"] + "F"), st.get(leg["k"] + "A")
+    if f is None or a is None:
+        return None
+    return f if leg["t"] == "home" else a if leg["t"] == "away" else f + a
+
+
 def leg_hits(leg, o):
+    if leg["m"] == "count":
+        v = _count(leg, o)
+        if v is None:
+            return None
+        return v > leg["line"] if leg["side"] == "over" else v < leg["line"]
     h, a = _goals(o, leg["s"])
     m = leg["m"]
     if m == "win":
@@ -76,6 +92,8 @@ def leg_value(leg, o):
     """The number a line-based leg is judged on (None for yes/no legs):
     total -> both teams, team -> that team, spread -> that team's margin."""
     m = leg["m"]
+    if m == "count":
+        return _count(leg, o)
     if m not in ("total", "team", "spread"):
         return None
     h, a = _goals(o, leg["s"])
@@ -172,7 +190,7 @@ def team_trends(team, opp, slot, logs, league, props, cfg, extras=(), base_cache
             leg = dict(p["leg"])
             if "line" in leg:
                 vals = [leg_value(p["leg"], o) for o in mine]
-                dk = "%s|%s|%s" % (leg["m"], leg["s"], leg.get("t", ""))
+                dk = "|".join((leg["m"], leg.get("k", ""), leg["s"], leg.get("t", "")))
                 if dists is not None and dk not in dists:
                     dists[dk] = _dist(leg_value(p["leg"], o) for o in league)
             if leg.get("t") in ("home", "away") and slot == "away":

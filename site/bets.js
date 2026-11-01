@@ -1,7 +1,7 @@
 /* Bet engine: leg definitions, game simulation, historical hit rates, odds math.
  *
  * A leg is { m, s, t, side, line, odds }:
- *   m    market: "win" | "total" | "team" | "spread" | "btts"
+ *   m    market: "win" | "total" | "team" | "spread" | "btts" | "prop" | "count" (corners/cards, k = stat)
  *   s    scope:  "game" (incl. OT/SO) | "reg" | "p1".."pN" (periods/quarters) | "h1" | "h2" (halves)
  *   t    pick:   "home" | "away" | "draw"     (win, team, spread)
  *   side        "over" | "under" | "yes" | "no" (total, team, btts)
@@ -28,7 +28,7 @@
   // Called with a data file's settings before building legs for that sport.
   function configure(settings) {
     SPORT = settings.sport || (settings.periods === 4 ? "nfl" : "nhl");
-    UNIT = SPORT === "nhl" ? "goals" : "points";
+    UNIT = SPORT === "nhl" || SPORT === "soccer" ? "goals" : "points";
     var scopes = settings.scopes || [
       { key: "game", label: "Full game" }, { key: "reg", label: "Regulation" },
       { key: "p1", label: "1st period" }, { key: "p2", label: "2nd period" }, { key: "p3", label: "3rd period" },
@@ -37,8 +37,7 @@
     scopes.forEach(function (x) { SCOPES[x.key] = x.label; });
     MARKETS = {};
     (settings.markets || Object.keys(ALL_MARKETS)).forEach(function (k) { MARKETS[k] = ALL_MARKETS[k]; });
-    if (SPORT !== "nhl") MARKETS.spread = "Spread";
-    else MARKETS.spread = "Puck line";
+    MARKETS.spread = SPORT === "nhl" ? "Puck line" : SPORT === "soccer" ? "Handicap" : "Spread";
     DEFAULTS = settings.lineDefaults || { total: 5.5, totalScope: "reg", team: 0.5, teamScope: "p1", spread: -1.5 };
     PROP_STATS = settings.propStats || [];
     if (PROP_STATS.length) MARKETS.prop = "Player prop";
@@ -62,6 +61,13 @@
 
   // true / false, or null when it can't be judged (e.g. a player prop with no box score).
   function hits(leg, o) {
+    if (leg.m === "count") {
+      // corners / cards from the final stats (F = home, A = away)
+      var st = o.st, f = st && st[leg.k + "F"], ag = st && st[leg.k + "A"];
+      if (f == null || ag == null) return null;
+      var v = leg.t === "home" ? f : leg.t === "away" ? ag : f + ag;
+      return leg.side === "over" ? v > leg.line : v < leg.line;
+    }
     if (leg.m === "prop") {
       var row = o.box && o.box[String(leg.pid)];
       if (!row || row[leg.stat] == null) return null;
@@ -96,6 +102,7 @@
 
   function label(leg, home, away) {
     if (leg.m === "prop") return (leg.name || "Player") + " " + leg.side + " " + leg.line + " " + statLabel(leg.stat);
+    if (leg.m === "count") return (leg.t === "both" ? "Match" : leg.t === "home" ? home : away) + " " + leg.side + " " + leg.line + " " + leg.k;
     var team = leg.t === "home" ? home : leg.t === "away" ? away : "";
     var sc = SCOPES[leg.s];
     var ln = function (v) { return (+v > 0 && leg.m === "spread" ? "+" : "") + v; };
@@ -303,6 +310,8 @@
         } else if (nfl) {
           // Most NFL overtimes end with a field goal or TD; some end tied.
           if (rnd() < otDecided) { var pts = rnd() < 0.55 ? 3 : 6; if (rnd() < homeOtShare) th += pts; else ta += pts; }
+        } else if (sport === "soccer") {
+          // league matches can end in a draw
         } else {
           // OT goal or shootout: either way the winner gets +1 in the final.
           var homeWins = rnd() < otGoal ? rnd() < homeOtShare : rnd() < 0.5;
@@ -394,7 +403,7 @@
   // ---------- result of a finished game ----------
   function resultOutcome(result) {
     if (!result || result.homeScore == null) return null;
-    return { p: result.periods || null, fh: result.homeScore, fa: result.awayScore, box: result.box || null };
+    return { p: result.periods || null, fh: result.homeScore, fa: result.awayScore, box: result.box || null, st: result.stats || null };
   }
 
   // ---------- odds ----------

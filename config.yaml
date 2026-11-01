@@ -328,3 +328,100 @@ nba:
       enabled: true
       weight: -15
       top_n: 2
+
+# ============================================================
+#  Soccer (every league below shares these settings)
+# ============================================================
+soccer:
+  leagues:                   # any ESPN league key works: see README
+    - { key: chi.1,          name: "Primera División", country: "Chile" }
+    - { key: uefa.champions, name: "Champions League",  country: "Europe", cup: true }   # cup: no rest days (we only see cup matches)
+    - { key: eng.1,          name: "Premier League",    country: "England" }
+    - { key: esp.1,          name: "LaLiga",            country: "Spain" }
+    - { key: ger.1,          name: "Bundesliga",        country: "Germany" }
+    - { key: ita.1,          name: "Serie A",           country: "Italy" }
+    - { key: fra.1,          name: "Ligue 1",           country: "France" }
+  days_ahead: 7              # build match days up to a week out
+  recent_games: 5
+  min_sample_games: 10       # top up early-season samples with last season
+  last_season_games: 19      # how many of last season's matches "+ Last season" adds
+  recent_weight: 0.4
+
+  # The default 3-leg combo: favorite wins + match over 1.5 goals +
+  # favorite scores in the 1st half.
+  legs:
+    total_line: 1.5
+    first_half_team_line: 0.5
+
+  trends:
+    min_games: 5
+    min_hit_rate: 0.80
+    min_gap: 0.25
+    max_per_game: 30
+
+  builder:
+    min_edge: 0.05
+
+  simulation:
+    iterations: 20000
+    shrink_games: 8          # pull small samples toward the league average
+
+  flag_tiers:
+    - { name: Strict,   min_score: 70 }
+    - { name: Standard, min_score: 55 }
+    - { name: Loose,    min_score: 40 }
+  min_flagged_per_day: 1
+  max_flagged_per_day: 3
+  fill_to_minimum: true
+  fill_min_score: 35         # "Best available" still needs this score (match days can have 1 game)
+
+  conditions:
+    fav_offense:
+      label: "Favorite scores a lot"
+      enabled: true
+      weight: 15
+      top_n: 5
+    dog_defense_leaky:
+      label: "Underdog concedes a lot"
+      enabled: true
+      weight: 15
+      bottom_n: 5
+    dog_offense_weak:
+      label: "Underdog struggles to score"
+      enabled: true
+      weight: 10
+      bottom_n: 5
+    fav_defense_solid:
+      label: "Favorite rarely concedes"
+      enabled: true
+      weight: 10
+      top_n: 5
+    goal_diff_gap:
+      label: "Big goal-difference gap"
+      enabled: true
+      weight: 15
+      min_gap: 1.0           # (fav GD/game) - (dog GD/game)
+    points_gap:
+      label: "Big points-per-game gap"
+      enabled: true
+      weight: 10
+      min_gap: 0.8
+    shots_gap:
+      label: "Dominates shots on target"
+      enabled: true
+      weight: 10
+      min_gap: 2.5
+    fav_home:
+      label: "Favorite at home"
+      enabled: true
+      weight: 10
+    rest_edge:
+      label: "Rest advantage"
+      enabled: true
+      weight: 5
+      min_days: 2
+    market_agrees:
+      label: "Bookmakers agree (heavy favorite)"
+      enabled: true
+      weight: 15
+      min_prob: 0.60         # favorite's implied chance to win
