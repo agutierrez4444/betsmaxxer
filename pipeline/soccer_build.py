@@ -127,8 +127,9 @@ def _halves(g, side):
     return h
 
 
-def team_logs(games, lines):
-    """{team: [records newest first]} in the shape the shared code expects."""
+def team_logs(games, lines, lg=None, tag=None):
+    """{team: [records newest first]} in the shape the shared code expects.
+    `lg`/`tag` mark matches from another competition (for all-competition trends)."""
     logs = defaultdict(list)
     for g in games:
         ln = g.get("lines") or lines.get(g["id"]) or {}
@@ -140,6 +141,7 @@ def team_logs(games, lines):
             et = any(x["half"] > 2 for x in g["goals"])
             logs[me["abbr"]].append({
                 "gameId": g["id"], "date": g["date"], "start": g.get("start") or "", "season": g["season"],
+                "tid": me.get("id"), "ab": me["abbr"], "lg": lg, "tag": ("%s %s" % (g["date"][5:], tag)) if tag else None,
                 "opp": op["abbr"], "home": side == "home",
                 "gf": me["score"], "ga": op["score"], "win": me["score"] > op["score"], "tie": me["score"] == op["score"],
                 "end": "ET" if et else "REG", "periods": halves,
@@ -201,21 +203,25 @@ def leg_rates(games, legs, as_favorite):
 
 # ---------- players ----------
 
-def player_rows(src, logs_cur):
-    side_of = {(r["gameId"], t): r for t in logs_cur for r in logs_cur[t]}
+def player_rows(summary, logs_cur):
+    """summary(gameId, league) -> slim summary. Rows are grouped under the team's
+    key in `logs_cur`, even when its abbreviation differs in another competition."""
+    side_of = {(r["gameId"], r["ab"]): (t, r) for t in logs_cur for r in logs_cur[t]}
+    lg_of = {r["gameId"]: r["lg"] for t in logs_cur for r in logs_cur[t]}
     by_team = defaultdict(lambda: defaultdict(list))
     flat = []
-    for gid in sorted({r["gameId"] for t in logs_cur for r in logs_cur[t]}):
-        s = src.summary(gid)
+    for gid in sorted(lg_of):
+        s = summary(gid, lg_of[gid])
         if not s:
             continue
         for p in s["players"]:
-            log = side_of.get((gid, p["team"]))
-            if not log or not p["starter"]:
+            hit = side_of.get((gid, p["team"]))
+            if not hit or not p["starter"]:
                 continue
+            team, log = hit
             row = dict(p)
-            row.update({"date": log["date"], "opp": log["opp"], "home": log["home"]})
-            by_team[p["team"]][p["id"]].append(row)
+            row.update({"date": log["date"], "opp": log["opp"], "home": log["home"], "tag": log.get("tag")})
+            by_team[team][p["id"]].append(row)
             flat.append(row)
     for t in by_team:
         for pid in by_team[t]:
@@ -342,7 +348,9 @@ def key_players(by_team, team):
 
 # ---------- day build ----------
 
-def build_day(day_str, today_str, cfg, lg_cfg, src):
+def build_day(day_str, today_str, cfg, lg_cfg, src, others=None, summary=None):
+    """others: [(league cfg, [finished matches this season])] from the other
+    configured competitions, for the "all competitions" trends."""
     board = src.day(day_str)
     slate = board["games"]
     if not slate:
@@ -383,10 +391,30 @@ def build_day(day_str, today_str, cfg, lg_cfg, src):
              "sotA": rank(lambda t: profiles[t]["sample"].get("sotAPg"), True)}
 
     logs_cur = {t: [r for r in logs[t] if r["season"] == year] for t in teams}
-    by_team, flat = player_rows(src, logs_cur)
+    summary = summary or (lambda gid, lg: src.summary(gid))
+    by_team, flat = player_rows(summary, logs_cur)
     league_out = trends.league_outcomes(logs_cur, extras=("totalLine", "st"))
     base_cache, dists = {}, {}
     tcfg = cfg["trends"]
+
+    # The same teams' matches in the other configured competitions (matched by ESPN team id).
+    logs_all, by_team_all = logs_cur, by_team
+    if others:
+        key_of = {r["tid"]: t for t in logs_cur for r in logs_cur[t][:1]}
+        for g in slate:
+            for side in ("home", "away"):
+                key_of.setdefault(g[side]["id"], g[side]["abbr"])
+        extra = defaultdict(list)
+        for olg, ogames in others:
+            mine = [g for g in ogames if g["date"] < day_str and (g["home"]["id"] in key_of or g["away"]["id"] in key_of)]
+            for recs in team_logs(mine, {}, lg=olg["key"], tag=olg.get("short") or olg["key"]).values():
+                for r in recs:
+                    if r["tid"] in key_of:
+                        extra[key_of[r["tid"]]].append(r)
+        if extra:
+            logs_all = {t: sorted(logs_cur.get(t, []) + extra.get(t, []), key=lambda r: (r["date"], r["start"]), reverse=True)
+                        for t in set(logs_cur) | set(extra)}
+            by_team_all, _ = player_rows(summary, logs_all)
 
     def ctx(stat, opp):
         p = profiles[opp]["sample"]
@@ -473,6 +501,19 @@ def build_day(day_str, today_str, cfg, lg_cfg, src):
             if t["kind"] == "player":
                 t["label"] = _prop_label(t["name"], t["prop"])
         game["trends"] = trends.finalize(items, tcfg)
+        if logs_all is not logs_cur and any(len(logs_all.get(t, [])) > len(logs_cur.get(t, [])) for t in (home, away)):
+            items = []
+            for team, opp, slot in ((home, away, "home"), (away, home, "away")):
+                if not logs_all.get(team):
+                    continue
+                items += trends.team_trends(team, opp, slot, logs_all, league_out, TEAM_PROPS, tcfg,
+                                            extras=("totalLine", "st"), base_cache=base_cache, dists=dists)
+                items += trends.player_trends(team, opp, by_team_all.get(team, {}), flat, PLAYER_PROPS, tcfg, ctx_fn=ctx,
+                                              dists=dists, info=lambda pid, team=team: {"headshot": by_team_all[team][pid][0]["headshot"]})
+            for t in items:
+                if t["kind"] == "player":
+                    t["label"] = _prop_label(t["name"], t["prop"])
+            game["trendsAll"] = trends.finalize(items, tcfg)
 
         if g["final"]:
             hs, as_ = g["home"]["score"], g["away"]["score"]
@@ -585,8 +626,23 @@ def main():
     today = date.today()
     today_str = today.isoformat()
     leagues = [lg for lg in cfg["leagues"] if not args.league or lg["key"] == args.league]
+    sources = {lg["key"]: Source(lg["key"], today_str) for lg in cfg["leagues"]}
+    season_cache = {}
+
+    def season_games(lg):
+        """Finished matches of `lg` this season (for other leagues' all-competition trends)."""
+        if lg["key"] not in season_cache:
+            s = sources[lg["key"]]
+            cal, _ = s.calendar(today_str)
+            season_cache[lg["key"]] = [g for d in cal if d <= today_str for g in s.day(d)["games"] if g["final"]]
+        return season_cache[lg["key"]]
+
+    def summary(gid, lg):
+        return sources[lg].summary(gid) if lg in sources else None
+
     for lg in leagues:
-        src = Source(lg["key"], today_str)
+        src = sources[lg["key"]]
+        others = [(o, season_games(o)) for o in cfg["leagues"] if o["key"] != lg["key"]]
         if args.date:
             days = [args.date]
         else:
@@ -598,7 +654,8 @@ def main():
         os.makedirs(league_dir, exist_ok=True)
         print("%s: %d match days to build" % (lg["name"], len(days)))
         for d in days:
-            data = build_day(d, today_str, cfg, lg, src)
+            data = build_day(d, today_str, cfg, lg, src, others,
+                             summary=lambda gid, l, k=lg["key"]: summary(gid, l or k))
             if data is None:
                 continue
             with open(os.path.join(league_dir, d + ".json"), "w", encoding="utf-8") as f:

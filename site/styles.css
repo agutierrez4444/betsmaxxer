@@ -645,3 +645,5 @@ body.modal-open { overflow: hidden; }
 .lchip img { width: 18px; height: 18px; object-fit: contain; }
 .lchip.on { color: var(--text); border-color: var(--accent); background: var(--accent-soft); }
 .kp-ph { width: 42px; height: 42px; border-radius: 50%; background: var(--surface-3); flex: none; }
+
+.tr-tools { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }

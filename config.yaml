@@ -334,13 +334,14 @@ nba:
 # ============================================================
 soccer:
   leagues:                   # any ESPN league key works: see README
-    - { key: chi.1,          name: "Primera División", country: "Chile" }
-    - { key: uefa.champions, name: "Champions League",  country: "Europe", cup: true }   # cup: no rest days (we only see cup matches)
-    - { key: eng.1,          name: "Premier League",    country: "England" }
-    - { key: esp.1,          name: "LaLiga",            country: "Spain" }
-    - { key: ger.1,          name: "Bundesliga",        country: "Germany" }
-    - { key: ita.1,          name: "Serie A",           country: "Italy" }
-    - { key: fra.1,          name: "Ligue 1",           country: "France" }
+    # short = tag shown on matches from that competition in "All competitions" trends
+    - { key: chi.1,          name: "Primera División", country: "Chile",   short: CHI }
+    - { key: uefa.champions, name: "Champions League",  country: "Europe",  short: UCL, cup: true }   # cup: no rest days (we only see cup matches)
+    - { key: eng.1,          name: "Premier League",    country: "England", short: EPL }
+    - { key: esp.1,          name: "LaLiga",            country: "Spain",   short: LIGA }
+    - { key: ger.1,          name: "Bundesliga",        country: "Germany", short: BUN }
+    - { key: ita.1,          name: "Serie A",           country: "Italy",   short: SA }
+    - { key: fra.1,          name: "Ligue 1",           country: "France",  short: L1 }
   days_ahead: 7              # build match days up to a week out
   recent_games: 5
   min_sample_games: 10       # top up early-season samples with last season
@@ -353,11 +354,11 @@ soccer:
     total_line: 1.5
     first_half_team_line: 0.5
 
-  trends:
+  trends:                    # looser than the other sports: soccer team bets rarely hit 80%
     min_games: 5
-    min_hit_rate: 0.80
-    min_gap: 0.25
-    max_per_game: 30
+    min_hit_rate: 0.70
+    min_gap: 0.15
+    max_per_game: 40
 
   builder:
     min_edge: 0.05

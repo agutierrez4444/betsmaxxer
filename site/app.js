@@ -390,7 +390,9 @@
   // ---------- trends ----------
   function initTrends(data, g) {
     var box = document.getElementById("trends");
-    var list = g.trends || [];
+    // Soccer: optionally include the teams' matches in their other competitions.
+    var scope = g.trendsAll ? pref("sf-tscope", "league") : "league";
+    var list = scope === "all" ? g.trendsAll : g.trends || [];
     var tcfg = data.settings.trends || {};
     var minEdge = (data.settings.builder || {}).min_edge || 0.05;
     var filter = "all";
@@ -436,9 +438,14 @@
         '<p class="hint" title="Hit in at least ' + pct(tcfg.min_hit_rate) + " of this season's games (min " + tcfg.min_games + ") and beat the league norm by " +
         Math.round((tcfg.min_gap || 0) * 100) + '+ points. The estimate next to your odds is pulled toward normal, because short streaks overstate things.">' +
         "Bets that keep hitting this season, well above the league norm. Click one to see every game and try other lines.</p></div>" +
-        '<div class="seg">' + f("all", "All") + f("team", "Team") + f("player", "Players") + f(g.away, g.away) + f(g.home, g.home) + "</div></div>" +
+        '<div class="tr-tools">' + (g.trendsAll ? '<div class="seg" data-scope>' +
+          '<button data-scope="league" class="' + (scope === "league" ? "on" : "") + '" title="Only matches in this competition">This competition</button>' +
+          '<button data-scope="all" class="' + (scope === "all" ? "on" : "") + '" title="Also the teams\' matches in the other leagues and cups we track">All competitions</button></div>' : "") +
+        '<div class="seg">' + f("all", "All") + f("team", "Team") + f("player", "Players") + f(g.away, g.away) + f(g.home, g.home) + "</div></div></div>" +
         (shown.length ? '<div class="trend-list">' + shown.map(function (x) { return row(x[0], x[1]); }).join("") + "</div>"
-          : '<div class="bempty">Nothing unusual enough for this game with the current thresholds (config.yaml → trends).</div>');
+          : '<div class="bempty">' + (scope === "league" && g.trendsAll && g.trendsAll.length
+            ? "Not enough here in this competition alone. Try <b>All competitions</b>."
+            : "Nothing unusual enough for this game with the current thresholds (config.yaml → trends).") + "</div>");
       shown.forEach(function (x) { if (odds[x[1]]) { box.querySelector('.tr-odds[data-i="' + x[1] + '"]').value = Bets.fromDecimal(odds[x[1]], pref("sf-odds", "decimal")); update(x[1]); } });
     }
 
@@ -461,6 +468,14 @@
       var b = ev.target.closest("button");
       if (!b) return;
       if (b.hasAttribute("data-f")) { filter = b.getAttribute("data-f"); render(); return; }
+      if (b.hasAttribute("data-scope") && b.getAttribute("data-scope")) {
+        scope = b.getAttribute("data-scope");
+        setPref("sf-tscope", scope);
+        list = scope === "all" ? g.trendsAll : g.trends || [];
+        odds = {};
+        render();
+        return;
+      }
       if (b.hasAttribute("data-open")) { openTrend(data, g, list[+b.getAttribute("data-open")]); return; }
       if (b.hasAttribute("data-add")) {
         var t = list[+b.getAttribute("data-add")];
